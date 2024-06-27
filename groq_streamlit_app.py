@@ -1,18 +1,35 @@
 import streamlit as st
 from groq import Groq
+from github import Github
+import base64
+import json
+from datetime import datetime
 
 # Function to initialize Groq client
 def init_groq_client():
     try:
-        # Use Streamlit secrets to get the API key
         api_key = st.secrets["GROQ_API_KEY"]
         return Groq(api_key=api_key)
     except Exception as e:
         st.error(f"Error initializing Groq client: {str(e)}")
         return None
 
+# Function to log chat to GitHub
+def log_chat_to_github(messages):
+    try:
+        g = Github(st.secrets["GITHUB_TOKEN"])
+        repo = g.get_repo(st.secrets["GITHUB_REPO"])
+        file_path = f"chat_logs/chat_log_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+        
+        content = json.dumps(messages, indent=2)
+        repo.create_file(file_path, f"Log chat {datetime.now()}", content)
+        
+        st.success("Chat log saved to GitHub")
+    except Exception as e:
+        st.error(f"Error logging chat to GitHub: {str(e)}")
+
 # Streamlit app
-st.title("CPDI Q&A App")
+st.title("Groq AI Q&A App with GitHub Logging")
 
 # Initialize session state for conversation history
 if "messages" not in st.session_state:
@@ -62,5 +79,12 @@ if user_question:
             # Add assistant response to chat history
             st.session_state.messages.append({"role": "assistant", "content": full_response})
 
+            # Log chat to GitHub
+            log_chat_to_github(st.session_state.messages)
+
         except Exception as e:
             st.error(f"An error occurred while processing your request: {str(e)}")
+
+# Add a button to manually trigger logging
+if st.button("Save Chat Log to GitHub"):
+    log_chat_to_github(st.session_state.messages)
