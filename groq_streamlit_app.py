@@ -12,7 +12,7 @@ def init_groq_client():
         return None
 
 # Streamlit app
-st.title("Groq AI Q&A App")
+st.title("CPDI Q&A App")
 
 # Initialize session state for conversation history
 if "messages" not in st.session_state:
