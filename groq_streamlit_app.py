@@ -64,7 +64,7 @@ def register_user(username, password):
 def save_chat_message(user_id, message, role):
     conn = sqlite3.connect('chat_app.db')
     c = conn.cursor()
-    timestamp = datetime.now(malaysia_tz).isoformat()
+    timestamp = datetime.now(malaysia_tz).strftime('%Y-%m-%d %H:%M:%S')
     c.execute("INSERT INTO chats (user_id, message, role, timestamp) VALUES (?, ?, ?, ?)",
               (user_id, message, role, timestamp))
     conn.commit()
@@ -155,9 +155,9 @@ def get_mean_hourly_query_data():
     conn = sqlite3.connect('chat_app.db')
     query = """
     SELECT 
-        strftime('%H', datetime(timestamp, 'localtime')) as hour,
+        strftime('%H', datetime(timestamp, '+8 hours')) as hour,
         COUNT(*) * 1.0 / (
-            SELECT COUNT(DISTINCT DATE(timestamp, 'localtime'))
+            SELECT COUNT(DISTINCT DATE(timestamp, '+8 hours'))
             FROM chats
         ) as mean_query_count
     FROM chats
