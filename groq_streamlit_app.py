@@ -64,7 +64,7 @@ def register_user(username, password):
 def save_chat_message(user_id, message, role):
     conn = sqlite3.connect('chat_app.db')
     c = conn.cursor()
-    timestamp = datetime.now(malaysia_tz).isoformat()
+    timestamp = datetime.now(malaysia_tz).strftime('%Y-%m-%d %H:%M:%S')
     c.execute("INSERT INTO chats (user_id, message, role, timestamp) VALUES (?, ?, ?, ?)",
               (user_id, message, role, timestamp))
     conn.commit()
@@ -92,7 +92,8 @@ def get_all_chats():
     conn.close()
     
     # Convert timestamp to Malaysia time
-    df['timestamp'] = pd.to_datetime(df['timestamp']).dt.tz_localize('UTC').dt.tz_convert(malaysia_tz)
+    df['timestamp'] = pd.to_datetime(df['timestamp'], format='%Y-%m-%d %H:%M:%S')
+    df['timestamp'] = df['timestamp'].dt.tz_localize(malaysia_tz)
     df['timestamp'] = df['timestamp'].dt.strftime('%Y-%m-%d %H:%M:%S')
     
     return df
@@ -120,7 +121,7 @@ def get_user_stats():
     total_users = c.fetchone()[0]
     
     # Number of users who have used the chat in the last 24 hours
-    yesterday = (datetime.now(malaysia_tz) - timedelta(days=1)).isoformat()
+    yesterday = (datetime.now(malaysia_tz) - timedelta(days=1)).strftime('%Y-%m-%d %H:%M:%S')
     c.execute("SELECT COUNT(DISTINCT user_id) FROM chats WHERE timestamp > ?", (yesterday,))
     active_users_24h = c.fetchone()[0]
     
@@ -155,9 +156,9 @@ def get_mean_hourly_query_data():
     conn = sqlite3.connect('chat_app.db')
     query = """
     SELECT 
-        strftime('%H', datetime(timestamp, 'localtime')) as hour,
+        strftime('%H', timestamp) as hour,
         COUNT(*) * 1.0 / (
-            SELECT COUNT(DISTINCT DATE(timestamp, 'localtime'))
+            SELECT COUNT(DISTINCT DATE(timestamp))
             FROM chats
         ) as mean_query_count
     FROM chats
@@ -200,7 +201,7 @@ def main():
                     if user:
                         st.session_state.user = user
                         st.success("Logged in successfully")
-                        st.experimental_rerun()
+                        st.rerun()
                     else:
                         st.error("Invalid username or password")
         
@@ -222,7 +223,7 @@ def main():
         st.write(f"Welcome, {st.session_state.user[1]}!")
         if st.button("Logout"):
             st.session_state.user = None
-            st.experimental_rerun()
+            st.rerun()
 
         if st.session_state.user[3]:  # Admin view
             st.subheader("Admin Dashboard")
