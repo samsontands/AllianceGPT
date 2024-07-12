@@ -134,7 +134,18 @@ def get_user_stats():
 
 # Function to get current active users (placeholder)
 def get_current_active_users():
-    return random.randint(1, 10)
+    conn = sqlite3.connect('chat_app.db')
+    c = conn.cursor()
+    
+    # Get the timestamp for 1 hour ago
+    one_hour_ago = (datetime.now(malaysia_tz) - timedelta(hours=1)).strftime('%Y-%m-%d %H:%M:%S')
+    
+    # Count distinct users who have sent a message in the last hour
+    c.execute("SELECT COUNT(DISTINCT user_id) FROM chats WHERE timestamp > ?", (one_hour_ago,))
+    active_users = c.fetchone()[0]
+    
+    conn.close()
+    return active_users
 
 # Function to get top users
 def get_top_users(limit=5):
@@ -281,14 +292,14 @@ def main():
             # Display user statistics
             total_users, active_users_24h, total_messages = get_user_stats()
             current_active_users = get_current_active_users()
-            
+        
             col1, col2, col3, col4 = st.columns(4)
             with col1:
                 st.metric("Total Users", total_users)
             with col2:
                 st.metric("Active Users (24h)", active_users_24h)
             with col3:
-                st.metric("Current Active Users", current_active_users)
+                st.metric("Current Active Users (1h)", current_active_users)
             with col4:
                 st.metric("Total Messages", total_messages)
             
