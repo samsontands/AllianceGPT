@@ -2,8 +2,9 @@ import streamlit as st
 import sqlite3
 from groq import Groq
 import bcrypt
-from datetime import datetime
+from datetime import datetime, timedelta
 import pandas as pd
+import random
 
 # Database setup
 def init_db():
@@ -99,6 +100,31 @@ def init_groq_client():
         st.error(f"Error initializing Groq client: {str(e)}")
         return None
 
+# New function to get user statistics
+def get_user_stats():
+    conn = sqlite3.connect('chat_app.db')
+    c = conn.cursor()
+    
+    # Total number of users
+    c.execute("SELECT COUNT(*) FROM users")
+    total_users = c.fetchone()[0]
+    
+    # Number of users who have used the chat in the last 24 hours
+    yesterday = (datetime.now() - timedelta(days=1)).isoformat()
+    c.execute("SELECT COUNT(DISTINCT user_id) FROM chats WHERE timestamp > ?", (yesterday,))
+    active_users_24h = c.fetchone()[0]
+    
+    # Total number of chat messages
+    c.execute("SELECT COUNT(*) FROM chats")
+    total_messages = c.fetchone()[0]
+    
+    conn.close()
+    return total_users, active_users_24h, total_messages
+
+# New function to get current active users (placeholder)
+def get_current_active_users():
+    return random.randint(1, 10)
+
 # Streamlit app
 def main():
     st.title("CPDI Q&A App")
@@ -147,7 +173,23 @@ def main():
             st.experimental_rerun()
 
         if st.session_state.user[3]:  # Admin view
-            st.subheader("Admin View - All Chats")
+            st.subheader("Admin View - Dashboard")
+            
+            # Display user statistics
+            total_users, active_users_24h, total_messages = get_user_stats()
+            current_active_users = get_current_active_users()
+            
+            col1, col2, col3, col4 = st.columns(4)
+            with col1:
+                st.metric("Total Users", total_users)
+            with col2:
+                st.metric("Active Users (24h)", active_users_24h)
+            with col3:
+                st.metric("Current Active Users", current_active_users)
+            with col4:
+                st.metric("Total Messages", total_messages)
+            
+            st.subheader("All Chats")
             all_chats_df = get_all_chats()
             
             # Display chats in the Streamlit app
