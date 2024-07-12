@@ -21,8 +21,8 @@ def get_all_chats():
     conn.close()
     
     # Convert timestamp to Malaysia time
-    df['timestamp'] = pd.to_datetime(df['timestamp'], format='%Y-%m-%d %H:%M:%S')
-    df['timestamp'] = df['timestamp'].dt.tz_localize('UTC').dt.tz_convert(malaysia_tz)
+    df['timestamp'] = pd.to_datetime(df['timestamp'], format='ISO8601')
+    df['timestamp'] = df['timestamp'].dt.tz_convert(malaysia_tz)
     df['timestamp'] = df['timestamp'].dt.strftime('%Y-%m-%d %H:%M:%S')
     
     return df
@@ -33,9 +33,10 @@ def convert_df_to_csv(df):
 
 # Function to get mean hourly query data
 def get_mean_hourly_query_data(df):
-    df['hour'] = pd.to_datetime(df['timestamp']).dt.hour
+    df['hour'] = pd.to_datetime(df['timestamp'], format='%Y-%m-%d %H:%M:%S').dt.hour
     hourly_counts = df['hour'].value_counts().sort_index()
-    total_days = (pd.to_datetime(df['timestamp']).max() - pd.to_datetime(df['timestamp']).min()).days + 1 or 1
+    total_days = (pd.to_datetime(df['timestamp'], format='%Y-%m-%d %H:%M:%S').max() - 
+                  pd.to_datetime(df['timestamp'], format='%Y-%m-%d %H:%M:%S').min()).days + 1 or 1
     mean_queries = hourly_counts / total_days
     result_df = pd.DataFrame({'hour': mean_queries.index, 'mean_query_count': mean_queries.values})
     all_hours = pd.DataFrame({'hour': range(24)})
