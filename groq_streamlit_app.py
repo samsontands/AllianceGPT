@@ -297,9 +297,9 @@ def main():
             with col1:
                 st.metric("Total Users", total_users)
             with col2:
-                st.metric("Active Users (24h)", active_users_24h)
+                st.metric("Active Users", active_users_24h)
             with col3:
-                st.metric("Current Active Users (1h)", current_active_users)
+                st.metric("Current Active Users", current_active_users)
             with col4:
                 st.metric("Total Messages", total_messages)
             
