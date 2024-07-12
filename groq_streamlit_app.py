@@ -92,9 +92,21 @@ def get_all_chats():
     conn.close()
     
     # Convert timestamp to Malaysia time
-    df['timestamp'] = pd.to_datetime(df['timestamp'], format='%Y-%m-%d %H:%M:%S')
-    df['timestamp'] = df['timestamp'].dt.tz_localize(malaysia_tz)
+    def safe_parse(ts):
+        try:
+            return pd.to_datetime(ts, format='%Y-%m-%d %H:%M:%S')
+        except ValueError:
+            try:
+                return pd.to_datetime(ts)
+            except:
+                return pd.NaT
+
+    df['timestamp'] = df['timestamp'].apply(safe_parse)
+    df['timestamp'] = df['timestamp'].dt.tz_localize(malaysia_tz, ambiguous='NaT', nonexistent='NaT')
     df['timestamp'] = df['timestamp'].dt.strftime('%Y-%m-%d %H:%M:%S')
+    
+    # Remove rows with invalid timestamps
+    df = df.dropna(subset=['timestamp'])
     
     return df
 
