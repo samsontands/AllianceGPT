@@ -11,7 +11,169 @@ import plotly.graph_objects as go
 # Set the time zone to GMT+8 (Malaysia)
 malaysia_tz = pytz.timezone('Asia/Kuala_Lumpur')
 
-# ... [All your existing functions remain unchanged] ...
+# Database setup
+def init_db():
+    conn = sqlite3.connect('chat_app.db')
+    c = conn.cursor()
+    c.execute('''CREATE TABLE IF NOT EXISTS users
+                 (id INTEGER PRIMARY KEY, username TEXT UNIQUE, password TEXT, is_admin INTEGER)''')
+    c.execute('''CREATE TABLE IF NOT EXISTS chats
+                 (id INTEGER PRIMARY KEY, user_id INTEGER, message TEXT, role TEXT, timestamp TEXT)''')
+    
+    # Check if admin exists, if not, create the fixed admin account
+    c.execute("SELECT * FROM users WHERE username=?", ('samson tan',))
+    if not c.fetchone():
+        hashed_password = bcrypt.hashpw('117853'.encode('utf-8'), bcrypt.gensalt())
+        c.execute("INSERT INTO users (username, password, is_admin) VALUES (?, ?, ?)",
+                  ('samson tan', hashed_password, 1))
+    
+    conn.commit()
+    conn.close()
+
+# User authentication
+def authenticate(username, password):
+    if not username or not password:
+        return None
+    conn = sqlite3.connect('chat_app.db')
+    c = conn.cursor()
+    c.execute("SELECT * FROM users WHERE username=?", (username,))
+    user = c.fetchone()
+    conn.close()
+    if user and bcrypt.checkpw(password.encode('utf-8'), user[2]):
+        return user
+    return None
+
+# User registration
+def register_user(username, password):
+    if not username or not password:
+        return False
+    hashed_password = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt())
+    conn = sqlite3.connect('chat_app.db')
+    c = conn.cursor()
+    try:
+        c.execute("INSERT INTO users (username, password, is_admin) VALUES (?, ?, 0)",
+                  (username, hashed_password))
+        conn.commit()
+        return True
+    except sqlite3.IntegrityError:
+        return False
+    finally:
+        conn.close()
+
+# Save chat message
+def save_chat_message(user_id, message, role):
+    conn = sqlite3.connect('chat_app.db')
+    c = conn.cursor()
+    timestamp = datetime.now(malaysia_tz).strftime('%Y-%m-%d %H:%M:%S')
+    c.execute("INSERT INTO chats (user_id, message, role, timestamp) VALUES (?, ?, ?, ?)",
+              (user_id, message, role, timestamp))
+    conn.commit()
+    conn.close()
+
+# Get user's chat history
+def get_user_chats(user_id):
+    conn = sqlite3.connect('chat_app.db')
+    c = conn.cursor()
+    c.execute("SELECT message, role FROM chats WHERE user_id=? ORDER BY timestamp", (user_id,))
+    chats = c.fetchall()
+    conn.close()
+    return [{"role": role, "content": message} for message, role in chats]
+
+# Get all chats (for admin)
+def get_all_chats():
+    conn = sqlite3.connect('chat_app.db')
+    query = """
+    SELECT users.username, chats.message, chats.role, chats.timestamp 
+    FROM chats 
+    JOIN users ON chats.user_id = users.id 
+    ORDER BY chats.timestamp
+    """
+    df = pd.read_sql_query(query, conn)
+    conn.close()
+    
+    # Convert timestamp to Malaysia time
+    df['timestamp'] = pd.to_datetime(df['timestamp'], format='%Y-%m-%d %H:%M:%S')
+    df['timestamp'] = df['timestamp'].dt.tz_localize(malaysia_tz)
+    df['timestamp'] = df['timestamp'].dt.strftime('%Y-%m-%d %H:%M:%S')
+    
+    return df
+
+# Convert DataFrame to CSV
+def convert_df_to_csv(df):
+    return df.to_csv(index=False).encode('utf-8')
+
+# Initialize Groq client
+def init_groq_client():
+    try:
+        api_key = st.secrets["GROQ_API_KEY"]
+        return Groq(api_key=api_key)
+    except Exception as e:
+        st.error(f"Error initializing Groq client: {str(e)}")
+        return None
+
+# Function to get user statistics
+def get_user_stats():
+    conn = sqlite3.connect('chat_app.db')
+    c = conn.cursor()
+    
+    # Total number of users
+    c.execute("SELECT COUNT(*) FROM users")
+    total_users = c.fetchone()[0]
+    
+    # Number of users who have used the chat in the last 24 hours
+    yesterday = (datetime.now(malaysia_tz) - timedelta(days=1)).strftime('%Y-%m-%d %H:%M:%S')
+    c.execute("SELECT COUNT(DISTINCT user_id) FROM chats WHERE timestamp > ?", (yesterday,))
+    active_users_24h = c.fetchone()[0]
+    
+    # Total number of chat messages
+    c.execute("SELECT COUNT(*) FROM chats")
+    total_messages = c.fetchone()[0]
+    
+    conn.close()
+    return total_users, active_users_24h, total_messages
+
+# Function to get current active users (placeholder)
+def get_current_active_users():
+    return random.randint(1, 10)
+
+# Function to get top users
+def get_top_users(limit=5):
+    conn = sqlite3.connect('chat_app.db')
+    query = """
+    SELECT users.username, COUNT(chats.id) as message_count
+    FROM users
+    LEFT JOIN chats ON users.id = chats.user_id
+    GROUP BY users.id
+    ORDER BY message_count DESC
+    LIMIT ?
+    """
+    df = pd.read_sql_query(query, conn, params=(limit,))
+    conn.close()
+    return df
+
+# Function to get mean hourly query data for all time
+def get_mean_hourly_query_data():
+    conn = sqlite3.connect('chat_app.db')
+    query = """
+    SELECT 
+        strftime('%H', timestamp) as hour,
+        COUNT(*) * 1.0 / (
+            SELECT COUNT(DISTINCT DATE(timestamp))
+            FROM chats
+        ) as mean_query_count
+    FROM chats
+    GROUP BY hour
+    ORDER BY hour
+    """
+    df = pd.read_sql_query(query, conn)
+    conn.close()
+    
+    # Ensure all hours are represented
+    all_hours = pd.DataFrame({'hour': [f'{i:02d}' for i in range(24)]})
+    df = pd.merge(all_hours, df, on='hour', how='left').fillna(0)
+    df['mean_query_count'] = df['mean_query_count'].astype(float)
+    
+    return df
 
 # New function to download database
 def get_database_download_link():
