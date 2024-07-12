@@ -60,7 +60,6 @@ def register_user(username, password):
     finally:
         conn.close()
 
-# Save chat message
 def save_chat_message(user_id, message, role):
     conn = sqlite3.connect('chat_app.db')
     c = conn.cursor()
@@ -167,25 +166,45 @@ def get_top_users(limit=5):
 def get_mean_hourly_query_data():
     conn = sqlite3.connect('chat_app.db')
     query = """
-    SELECT 
-        strftime('%H', timestamp) as hour,
-        COUNT(*) * 1.0 / (
-            SELECT COUNT(DISTINCT DATE(timestamp))
-            FROM chats
-        ) as mean_query_count
+    SELECT timestamp
     FROM chats
-    GROUP BY hour
-    ORDER BY hour
     """
     df = pd.read_sql_query(query, conn)
     conn.close()
     
+    def safe_parse(ts):
+        try:
+            dt = pd.to_datetime(ts, errors='raise')
+        except:
+            try:
+                dt = pd.to_datetime(ts.split('.')[0], errors='raise')
+            except:
+                return pd.Timestamp.now(tz=malaysia_tz)
+        
+        if dt.tzinfo is None:
+            dt = dt.tz_localize('UTC').tz_convert(malaysia_tz)
+        else:
+            dt = dt.tz_convert(malaysia_tz)
+        
+        return dt
+
+    df['timestamp'] = df['timestamp'].apply(safe_parse)
+    df['hour'] = df['timestamp'].dt.strftime('%H')
+    
+    hourly_counts = df['hour'].value_counts().sort_index()
+    total_days = (df['timestamp'].max() - df['timestamp'].min()).days + 1
+    
+    mean_queries = hourly_counts / total_days
+    
+    result_df = pd.DataFrame({'hour': mean_queries.index, 'mean_query_count': mean_queries.values})
+    result_df = result_df.sort_values('hour')
+    
     # Ensure all hours are represented
     all_hours = pd.DataFrame({'hour': [f'{i:02d}' for i in range(24)]})
-    df = pd.merge(all_hours, df, on='hour', how='left').fillna(0)
-    df['mean_query_count'] = df['mean_query_count'].astype(float)
+    result_df = pd.merge(all_hours, result_df, on='hour', how='left').fillna(0)
+    result_df['mean_query_count'] = result_df['mean_query_count'].astype(float)
     
-    return df
+    return result_df
 
 # Streamlit app
 def main():
