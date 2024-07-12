@@ -1,4 +1,7 @@
-streamlit==1.32.0
+streamlit==1.36.0
+sqlite3
 groq==0.4.2
 bcrypt==4.1.2
-plotly
+pandas==2.2.2
+pytz==2024.1
+plotly==5.22.0
