@@ -207,13 +207,22 @@ def main():
     if 'user' not in st.session_state:
         st.session_state.user = None
 
+    if 'view' not in st.session_state:
+        st.session_state.view = 'normal'
+
     if st.session_state.user is None:
         choice = st.selectbox("Login/Signup", ["Login", "Sign Up"])
         
         if choice == "Login":
             username = st.text_input("Username")
-            password = st.text_input("Password", type="password")
-            if st.button("Login"):
+            password = st.text_input("Password", type="password", key="password")
+            login_button = st.button("Login")
+            
+            # Check if Enter key is pressed
+            if password and st.session_state.password != password:
+                login_button = True
+            
+            if login_button:
                 if not username or not password:
                     st.error("Username and password cannot be empty.")
                 else:
@@ -243,9 +252,18 @@ def main():
         st.write(f"Welcome, {st.session_state.user[1]}!")
         if st.button("Logout"):
             st.session_state.user = None
+            st.session_state.view = 'normal'
             st.rerun()
 
-        if st.session_state.user[3]:  # Admin view
+        if st.session_state.user[3]:  # Admin user
+            st.sidebar.title("Admin Controls")
+            view_choice = st.sidebar.radio("Choose View", ['Admin', 'Normal'])
+            st.session_state.view = view_choice.lower()
+
+            if st.sidebar.button("Refresh Data"):
+                st.rerun()
+
+        if st.session_state.view == 'admin' and st.session_state.user[3]:  # Admin view
             st.subheader("Admin Dashboard")
             
             col1, col2, col3 = st.columns(3)
