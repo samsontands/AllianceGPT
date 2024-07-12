@@ -6,6 +6,7 @@ from datetime import datetime, timedelta
 import pandas as pd
 import random
 import pytz
+import plotly.express as px
 
 # Set the time zone to GMT+8 (Malaysia)
 malaysia_tz = pytz.timezone('Asia/Kuala_Lumpur')
@@ -149,6 +150,27 @@ def get_top_users(limit=5):
     conn.close()
     return df
 
+# Function to get hourly query data
+def get_hourly_query_data():
+    conn = sqlite3.connect('chat_app.db')
+    query = """
+    SELECT strftime('%H', datetime(timestamp, 'localtime')) as hour, 
+           COUNT(*) as query_count
+    FROM chats
+    WHERE timestamp >= datetime('now', '-1 day', 'localtime')
+    GROUP BY hour
+    ORDER BY hour
+    """
+    df = pd.read_sql_query(query, conn)
+    conn.close()
+    
+    # Ensure all hours are represented
+    all_hours = pd.DataFrame({'hour': [f'{i:02d}' for i in range(24)]})
+    df = pd.merge(all_hours, df, on='hour', how='left').fillna(0)
+    df['query_count'] = df['query_count'].astype(int)
+    
+    return df
+
 # Streamlit app
 def main():
     st.title("CPDI Q&A App")
@@ -220,6 +242,15 @@ def main():
             st.subheader("Top Users")
             top_users_df = get_top_users()
             st.dataframe(top_users_df, hide_index=True)
+            
+            # Display hourly query chart
+            st.subheader("Hourly Queries (Last 24 Hours)")
+            hourly_data = get_hourly_query_data()
+            fig = px.bar(hourly_data, x='hour', y='query_count', 
+                         labels={'hour': 'Hour of Day', 'query_count': 'Number of Queries'},
+                         title='Queries per Hour (Last 24 Hours)')
+            fig.update_layout(xaxis = dict(tickmode = 'linear', tick0 = 0, dtick = 1))
+            st.plotly_chart(fig)
             
             st.subheader("All Chats")
             all_chats_df = get_all_chats()
