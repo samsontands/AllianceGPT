@@ -377,8 +377,6 @@ def main():
                             )
                             for chunk in stream:
                                 if chunk.choices[0].delta.content is not None:
-            for chunk in stream:
-                                if chunk.choices[0].delta.content is not None:
                                     full_response += chunk.choices[0].delta.content
                                     message_placeholder.markdown(full_response + "▌")
                             
