@@ -100,7 +100,7 @@ def init_groq_client():
         st.error(f"Error initializing Groq client: {str(e)}")
         return None
 
-# New function to get user statistics
+# Function to get user statistics
 def get_user_stats():
     conn = sqlite3.connect('chat_app.db')
     c = conn.cursor()
@@ -121,9 +121,24 @@ def get_user_stats():
     conn.close()
     return total_users, active_users_24h, total_messages
 
-# New function to get current active users (placeholder)
+# Function to get current active users (placeholder)
 def get_current_active_users():
     return random.randint(1, 10)
+
+# New function to get top users
+def get_top_users(limit=5):
+    conn = sqlite3.connect('chat_app.db')
+    query = """
+    SELECT users.username, COUNT(chats.id) as message_count
+    FROM users
+    LEFT JOIN chats ON users.id = chats.user_id
+    GROUP BY users.id
+    ORDER BY message_count DESC
+    LIMIT ?
+    """
+    df = pd.read_sql_query(query, conn, params=(limit,))
+    conn.close()
+    return df
 
 # Streamlit app
 def main():
@@ -173,7 +188,7 @@ def main():
             st.experimental_rerun()
 
         if st.session_state.user[3]:  # Admin view
-            st.subheader("Admin View - Dashboard")
+            st.subheader("Admin Dashboard")
             
             # Display user statistics
             total_users, active_users_24h, total_messages = get_user_stats()
@@ -188,6 +203,11 @@ def main():
                 st.metric("Current Active Users", current_active_users)
             with col4:
                 st.metric("Total Messages", total_messages)
+            
+            # Display top users
+            st.subheader("Top Users")
+            top_users_df = get_top_users()
+            st.dataframe(top_users_df, hide_index=True)
             
             st.subheader("All Chats")
             all_chats_df = get_all_chats()
