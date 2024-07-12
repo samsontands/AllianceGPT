@@ -101,7 +101,12 @@ def get_all_chats():
                 return pd.NaT
 
     df['timestamp'] = df['timestamp'].apply(safe_parse)
-    df['timestamp'] = df['timestamp'].dt.tz_localize(malaysia_tz, ambiguous='NaT', nonexistent='NaT')
+    
+    # Only localize and convert timestamps that are not NaT
+    mask = df['timestamp'].notna()
+    df.loc[mask, 'timestamp'] = df.loc[mask, 'timestamp'].dt.tz_localize('UTC', ambiguous='NaT', nonexistent='NaT').dt.tz_convert(malaysia_tz)
+    
+    # Convert back to string format
     df['timestamp'] = df['timestamp'].dt.strftime('%Y-%m-%d %H:%M:%S')
     
     # Remove rows with invalid timestamps
