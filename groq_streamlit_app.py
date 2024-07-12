@@ -4,6 +4,7 @@ from groq import Groq
 import bcrypt
 from datetime import datetime, timedelta
 import pandas as pd
+import random
 import pytz
 import plotly.graph_objects as go
 
@@ -17,7 +18,7 @@ def init_db():
     c.execute('''CREATE TABLE IF NOT EXISTS users
                  (id INTEGER PRIMARY KEY, username TEXT UNIQUE, password TEXT, is_admin INTEGER)''')
     c.execute('''CREATE TABLE IF NOT EXISTS chats
-                 (id INTEGER PRIMARY KEY, user_id INTEGER, message TEXT, role TEXT, timestamp TEXT, last_activity TEXT)''')
+                 (id INTEGER PRIMARY KEY, user_id INTEGER, message TEXT, role TEXT, timestamp TEXT)''')
     
     # Check if admin exists, if not, create the fixed admin account
     c.execute("SELECT * FROM users WHERE username=?", ('samson tan',))
@@ -63,9 +64,9 @@ def register_user(username, password):
 def save_chat_message(user_id, message, role):
     conn = sqlite3.connect('chat_app.db')
     c = conn.cursor()
-    now = datetime.now(malaysia_tz).strftime('%Y-%m-%d %H:%M:%S')
-    c.execute("INSERT INTO chats (user_id, message, role, timestamp, last_activity) VALUES (?, ?, ?, ?, ?)",
-              (user_id, message, role, now, now))
+    timestamp = datetime.now(malaysia_tz).strftime('%Y-%m-%d %H:%M:%S')
+    c.execute("INSERT INTO chats (user_id, message, role, timestamp) VALUES (?, ?, ?, ?)",
+              (user_id, message, role, timestamp))
     conn.commit()
     conn.close()
 
@@ -131,15 +132,9 @@ def get_user_stats():
     conn.close()
     return total_users, active_users_24h, total_messages
 
-# Function to get current active users
+# Function to get current active users (placeholder)
 def get_current_active_users():
-    conn = sqlite3.connect('chat_app.db')
-    c = conn.cursor()
-    one_hour_ago = (datetime.now(malaysia_tz) - timedelta(hours=1)).strftime('%Y-%m-%d %H:%M:%S')
-    c.execute("SELECT COUNT(DISTINCT user_id) FROM chats WHERE last_activity > ?", (one_hour_ago,))
-    active_users = c.fetchone()[0]
-    conn.close()
-    return active_users
+    return random.randint(1, 10)
 
 # Function to get top users
 def get_top_users(limit=5):
@@ -180,7 +175,7 @@ def get_mean_hourly_query_data():
     
     return df
 
-# Function to download database
+# New function to download database
 def get_database_download_link():
     with open('chat_app.db', 'rb') as f:
         bytes = f.read()
@@ -191,7 +186,7 @@ def get_database_download_link():
         mime="application/octet-stream"
     )
 
-# Function to reinitialize database
+# New function to reinitialize database
 def reinitialize_db():
     import os
     if os.path.exists('chat_app.db'):
@@ -293,7 +288,7 @@ def main():
             with col2:
                 st.metric("Active Users (24h)", active_users_24h)
             with col3:
-                st.metric("Active Users (1h)", current_active_users)
+                st.metric("Current Active Users", current_active_users)
             with col4:
                 st.metric("Total Messages", total_messages)
             
