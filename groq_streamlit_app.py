@@ -5,6 +5,10 @@ import bcrypt
 from datetime import datetime, timedelta
 import pandas as pd
 import random
+import pytz
+
+# Set the time zone to GMT+8 (Malaysia)
+malaysia_tz = pytz.timezone('Asia/Kuala_Lumpur')
 
 # Database setup
 def init_db():
@@ -59,7 +63,7 @@ def register_user(username, password):
 def save_chat_message(user_id, message, role):
     conn = sqlite3.connect('chat_app.db')
     c = conn.cursor()
-    timestamp = datetime.now().isoformat()
+    timestamp = datetime.now(malaysia_tz).isoformat()
     c.execute("INSERT INTO chats (user_id, message, role, timestamp) VALUES (?, ?, ?, ?)",
               (user_id, message, role, timestamp))
     conn.commit()
@@ -85,6 +89,11 @@ def get_all_chats():
     """
     df = pd.read_sql_query(query, conn)
     conn.close()
+    
+    # Convert timestamp to Malaysia time
+    df['timestamp'] = pd.to_datetime(df['timestamp']).dt.tz_localize('UTC').dt.tz_convert(malaysia_tz)
+    df['timestamp'] = df['timestamp'].dt.strftime('%Y-%m-%d %H:%M:%S')
+    
     return df
 
 # Convert DataFrame to CSV
@@ -110,7 +119,7 @@ def get_user_stats():
     total_users = c.fetchone()[0]
     
     # Number of users who have used the chat in the last 24 hours
-    yesterday = (datetime.now() - timedelta(days=1)).isoformat()
+    yesterday = (datetime.now(malaysia_tz) - timedelta(days=1)).isoformat()
     c.execute("SELECT COUNT(DISTINCT user_id) FROM chats WHERE timestamp > ?", (yesterday,))
     active_users_24h = c.fetchone()[0]
     
@@ -125,7 +134,7 @@ def get_user_stats():
 def get_current_active_users():
     return random.randint(1, 10)
 
-# New function to get top users
+# Function to get top users
 def get_top_users(limit=5):
     conn = sqlite3.connect('chat_app.db')
     query = """
@@ -143,6 +152,9 @@ def get_top_users(limit=5):
 # Streamlit app
 def main():
     st.title("CPDI Q&A App")
+    
+    # Display current time in Malaysia timezone
+    st.write(f"Current time: {datetime.now(malaysia_tz).strftime('%Y-%m-%d %H:%M:%S')} (GMT+8)")
     
     init_db()
 
