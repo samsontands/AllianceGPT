@@ -6,7 +6,7 @@ from datetime import datetime, timedelta
 import pandas as pd
 import random
 import pytz
-import plotly.express as px
+import plotly.graph_objects as go
 
 # Set the time zone to GMT+8 (Malaysia)
 malaysia_tz = pytz.timezone('Asia/Kuala_Lumpur')
@@ -150,14 +150,17 @@ def get_top_users(limit=5):
     conn.close()
     return df
 
-# Function to get hourly query data
-def get_hourly_query_data():
+# Function to get mean hourly query data for all time
+def get_mean_hourly_query_data():
     conn = sqlite3.connect('chat_app.db')
     query = """
-    SELECT strftime('%H', datetime(timestamp, 'localtime')) as hour, 
-           COUNT(*) as query_count
+    SELECT 
+        strftime('%H', datetime(timestamp, 'localtime')) as hour,
+        COUNT(*) * 1.0 / (
+            SELECT COUNT(DISTINCT DATE(timestamp, 'localtime'))
+            FROM chats
+        ) as mean_query_count
     FROM chats
-    WHERE timestamp >= datetime('now', '-1 day', 'localtime')
     GROUP BY hour
     ORDER BY hour
     """
@@ -167,7 +170,7 @@ def get_hourly_query_data():
     # Ensure all hours are represented
     all_hours = pd.DataFrame({'hour': [f'{i:02d}' for i in range(24)]})
     df = pd.merge(all_hours, df, on='hour', how='left').fillna(0)
-    df['query_count'] = df['query_count'].astype(int)
+    df['mean_query_count'] = df['mean_query_count'].astype(float)
     
     return df
 
@@ -243,13 +246,33 @@ def main():
             top_users_df = get_top_users()
             st.dataframe(top_users_df, hide_index=True)
             
-            # Display hourly query chart
-            st.subheader("Hourly Queries (Last 24 Hours)")
-            hourly_data = get_hourly_query_data()
-            fig = px.bar(hourly_data, x='hour', y='query_count', 
-                         labels={'hour': 'Hour of Day', 'query_count': 'Number of Queries'},
-                         title='Queries per Hour (Last 24 Hours)')
-            fig.update_layout(xaxis = dict(tickmode = 'linear', tick0 = 0, dtick = 1))
+            # Display mean hourly query chart
+            st.subheader("Mean Hourly Queries (All Time)")
+            hourly_data = get_mean_hourly_query_data()
+            
+            # Create color scale
+            min_val = hourly_data['mean_query_count'].min()
+            max_val = hourly_data['mean_query_count'].max()
+            colors = ['#00ff00' if x == min_val else 
+                      '#ff0000' if x == max_val else 
+                      f'rgb({int(255*((x-min_val)/(max_val-min_val)))},{int(255*((max_val-x)/(max_val-min_val)))},0)' 
+                      for x in hourly_data['mean_query_count']]
+
+            fig = go.Figure(data=[go.Bar(
+                x=hourly_data['hour'],
+                y=hourly_data['mean_query_count'],
+                marker_color=colors,
+                text=hourly_data['mean_query_count'].round(2),
+                textposition='auto',
+            )])
+            
+            fig.update_layout(
+                title='Mean Queries per Hour (All Time)',
+                xaxis_title='Hour of Day',
+                yaxis_title='Mean Number of Queries',
+                xaxis = dict(tickmode = 'linear', tick0 = 0, dtick = 1)
+            )
+            
             st.plotly_chart(fig)
             
             st.subheader("All Chats")
