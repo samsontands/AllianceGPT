@@ -60,10 +60,11 @@ def register_user(username, password):
     finally:
         conn.close()
 
+# Save chat message
 def save_chat_message(user_id, message, role):
     conn = sqlite3.connect('chat_app.db')
     c = conn.cursor()
-    timestamp = datetime.now(malaysia_tz).strftime('%Y-%m-%d %H:%M:%S')
+    timestamp = datetime.now(malaysia_tz).isoformat()
     c.execute("INSERT INTO chats (user_id, message, role, timestamp) VALUES (?, ?, ?, ?)",
               (user_id, message, role, timestamp))
     conn.commit()
@@ -91,26 +92,8 @@ def get_all_chats():
     conn.close()
     
     # Convert timestamp to Malaysia time
-    def safe_parse(ts):
-        try:
-            return pd.to_datetime(ts, format='%Y-%m-%d %H:%M:%S')
-        except ValueError:
-            try:
-                return pd.to_datetime(ts)
-            except:
-                return pd.NaT
-
-    df['timestamp'] = df['timestamp'].apply(safe_parse)
-    
-    # Only localize and convert timestamps that are not NaT
-    mask = df['timestamp'].notna()
-    df.loc[mask, 'timestamp'] = df.loc[mask, 'timestamp'].dt.tz_localize('UTC', ambiguous='NaT', nonexistent='NaT').dt.tz_convert(malaysia_tz)
-    
-    # Convert back to string format
+    df['timestamp'] = pd.to_datetime(df['timestamp']).dt.tz_localize('UTC').dt.tz_convert(malaysia_tz)
     df['timestamp'] = df['timestamp'].dt.strftime('%Y-%m-%d %H:%M:%S')
-    
-    # Remove rows with invalid timestamps
-    df = df.dropna(subset=['timestamp'])
     
     return df
 
@@ -137,7 +120,7 @@ def get_user_stats():
     total_users = c.fetchone()[0]
     
     # Number of users who have used the chat in the last 24 hours
-    yesterday = (datetime.now(malaysia_tz) - timedelta(days=1)).strftime('%Y-%m-%d %H:%M:%S')
+    yesterday = (datetime.now(malaysia_tz) - timedelta(days=1)).isoformat()
     c.execute("SELECT COUNT(DISTINCT user_id) FROM chats WHERE timestamp > ?", (yesterday,))
     active_users_24h = c.fetchone()[0]
     
@@ -171,45 +154,25 @@ def get_top_users(limit=5):
 def get_mean_hourly_query_data():
     conn = sqlite3.connect('chat_app.db')
     query = """
-    SELECT timestamp
+    SELECT 
+        strftime('%H', datetime(timestamp, 'localtime')) as hour,
+        COUNT(*) * 1.0 / (
+            SELECT COUNT(DISTINCT DATE(timestamp, 'localtime'))
+            FROM chats
+        ) as mean_query_count
     FROM chats
+    GROUP BY hour
+    ORDER BY hour
     """
     df = pd.read_sql_query(query, conn)
     conn.close()
     
-    def safe_parse(ts):
-        try:
-            dt = pd.to_datetime(ts, errors='raise')
-        except:
-            try:
-                dt = pd.to_datetime(ts.split('.')[0], errors='raise')
-            except:
-                return pd.Timestamp.now(tz=malaysia_tz)
-        
-        if dt.tzinfo is None:
-            dt = dt.tz_localize('UTC').tz_convert(malaysia_tz)
-        else:
-            dt = dt.tz_convert(malaysia_tz)
-        
-        return dt
-
-    df['timestamp'] = df['timestamp'].apply(safe_parse)
-    df['hour'] = df['timestamp'].dt.strftime('%H')
-    
-    hourly_counts = df['hour'].value_counts().sort_index()
-    total_days = (df['timestamp'].max() - df['timestamp'].min()).days + 1
-    
-    mean_queries = hourly_counts / total_days
-    
-    result_df = pd.DataFrame({'hour': mean_queries.index, 'mean_query_count': mean_queries.values})
-    result_df = result_df.sort_values('hour')
-    
     # Ensure all hours are represented
     all_hours = pd.DataFrame({'hour': [f'{i:02d}' for i in range(24)]})
-    result_df = pd.merge(all_hours, result_df, on='hour', how='left').fillna(0)
-    result_df['mean_query_count'] = result_df['mean_query_count'].astype(float)
+    df = pd.merge(all_hours, df, on='hour', how='left').fillna(0)
+    df['mean_query_count'] = df['mean_query_count'].astype(float)
     
-    return result_df
+    return df
 
 # Streamlit app
 def main():
