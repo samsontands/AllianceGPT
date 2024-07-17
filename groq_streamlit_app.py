@@ -85,11 +85,11 @@ def get_mean_daily_query_data():
     query = """
     SELECT 
         strftime('%w', timestamp) as day_of_week,
-        COUNT(*) * 1.0 / (
+        ROUND(COUNT(*) * 1.0 / (
             SELECT COUNT(DISTINCT DATE(timestamp))
             FROM chats
             WHERE role = 'user'
-        ) as mean_query_count
+        )) as mean_query_count
     FROM chats
     WHERE role = 'user'
     GROUP BY day_of_week
@@ -101,7 +101,7 @@ def get_mean_daily_query_data():
     # Ensure all days are represented
     all_days = pd.DataFrame({'day_of_week': [str(i) for i in range(7)]})
     df = pd.merge(all_days, df, on='day_of_week', how='left').fillna(0)
-    df['mean_query_count'] = df['mean_query_count'].astype(float)
+    df['mean_query_count'] = df['mean_query_count'].astype(int)
     df['day_name'] = df['day_of_week'].map({
         '0': 'Sunday', '1': 'Monday', '2': 'Tuesday', '3': 'Wednesday',
         '4': 'Thursday', '5': 'Friday', '6': 'Saturday'
@@ -198,10 +198,10 @@ def get_mean_hourly_query_data():
     query = """
     SELECT 
         strftime('%H', timestamp) as hour,
-        COUNT(*) * 1.0 / (
+        ROUND(COUNT(*) * 1.0 / (
             SELECT COUNT(DISTINCT DATE(timestamp))
             FROM chats
-        ) as mean_query_count
+        )) as mean_query_count
     FROM chats
     GROUP BY hour
     ORDER BY hour
@@ -212,7 +212,7 @@ def get_mean_hourly_query_data():
     # Ensure all hours are represented
     all_hours = pd.DataFrame({'hour': [f'{i:02d}' for i in range(24)]})
     df = pd.merge(all_hours, df, on='hour', how='left').fillna(0)
-    df['mean_query_count'] = df['mean_query_count'].astype(float)
+    df['mean_query_count'] = df['mean_query_count'].astype(int)
     
     return df
 
@@ -338,30 +338,41 @@ def main():
             st.subheader("Mean Daily Queries (All Time)")
             daily_data = get_mean_daily_query_data()
             
-            # Create color scale
-            min_val = daily_data['mean_query_count'].min()
-            max_val = daily_data['mean_query_count'].max()
-            colors = ['#00ff00' if x == min_val else 
-                      '#ff0000' if x == max_val else 
-                      f'rgb({int(255*((x-min_val)/(max_val-min_val)))},{int(255*((max_val-x)/(max_val-min_val)))},0)' 
-                      for x in daily_data['mean_query_count']]
-
-            fig = go.Figure(data=[go.Bar(
+            fig_daily = go.Figure(data=[go.Bar(
                 x=daily_data['day_name'],
                 y=daily_data['mean_query_count'],
-                marker_color=colors,
-                text=daily_data['mean_query_count'].round(2),
+                text=daily_data['mean_query_count'],
                 textposition='auto',
             )])
             
-            fig.update_layout(
+            fig_daily.update_layout(
                 title='Mean Queries per Day (All Time)',
                 xaxis_title='Day of Week',
                 yaxis_title='Mean Number of Queries',
                 xaxis = dict(categoryorder='array', categoryarray=['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'])
             )
             
-            st.plotly_chart(fig)
+            st.plotly_chart(fig_daily)
+
+            # Display mean hourly query chart
+            st.subheader("Mean Hourly Queries (All Time)")
+            hourly_data = get_mean_hourly_query_data()
+            
+            fig_hourly = go.Figure(data=[go.Bar(
+                x=hourly_data['hour'],
+                y=hourly_data['mean_query_count'],
+                text=hourly_data['mean_query_count'],
+                textposition='auto',
+            )])
+            
+            fig_hourly.update_layout(
+                title='Mean Queries per Hour (All Time)',
+                xaxis_title='Hour of Day',
+                yaxis_title='Mean Number of Queries',
+                xaxis = dict(tickmode = 'linear', tick0 = 0, dtick = 1)
+            )
+            
+            st.plotly_chart(fig_hourly)
             
             st.subheader("All Chats")
             all_chats_df = get_all_chats()
@@ -400,7 +411,7 @@ def main():
                             stream = client.chat.completions.create(
                                 messages=[
                                     {"role": "system", "content": "You are a helpful assistant."},
-                                    *reversed(user_chats),  # Reverse the chat history for the AI
+                                    *user_chats,
                                     {"role": "user", "content": user_question}
                                 ],
                                 model="mixtral-8x7b-32768",
