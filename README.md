@@ -6,8 +6,7 @@ The CPDI Q&A App is a Streamlit-based web application that provides a chat inter
 ## Features
 - User registration and authentication
 - Chat interface for asking questions
-- Chat history storage
-- Admin view for monitoring all chats
+
 - Integration with Groq API for AI-powered responses
 
 ## Installation
