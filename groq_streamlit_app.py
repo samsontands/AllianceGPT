@@ -338,11 +338,20 @@ def main():
             st.subheader("Mean Daily Queries (All Time)")
             daily_data = get_mean_daily_query_data()
             
+            # Create color scale for daily chart
+            daily_min = daily_data['mean_query_count'].min()
+            daily_max = daily_data['mean_query_count'].max()
+            daily_colors = ['#00ff00' if x == daily_min else 
+                            '#ff0000' if x == daily_max else 
+                            f'rgb({int(255*((x-daily_min)/(daily_max-daily_min)))},{int(255*((daily_max-x)/(daily_max-daily_min)))},0)' 
+                            for x in daily_data['mean_query_count']]
+
             fig_daily = go.Figure(data=[go.Bar(
                 x=daily_data['day_name'],
                 y=daily_data['mean_query_count'],
                 text=daily_data['mean_query_count'],
                 textposition='auto',
+                marker_color=daily_colors
             )])
             
             fig_daily.update_layout(
@@ -358,11 +367,20 @@ def main():
             st.subheader("Mean Hourly Queries (All Time)")
             hourly_data = get_mean_hourly_query_data()
             
+            # Create color scale for hourly chart
+            hourly_min = hourly_data['mean_query_count'].min()
+            hourly_max = hourly_data['mean_query_count'].max()
+            hourly_colors = ['#00ff00' if x == hourly_min else 
+                             '#ff0000' if x == hourly_max else 
+                             f'rgb({int(255*((x-hourly_min)/(hourly_max-hourly_min)))},{int(255*((hourly_max-x)/(hourly_max-hourly_min)))},0)' 
+                             for x in hourly_data['mean_query_count']]
+
             fig_hourly = go.Figure(data=[go.Bar(
                 x=hourly_data['hour'],
                 y=hourly_data['mean_query_count'],
                 text=hourly_data['mean_query_count'],
                 textposition='auto',
+                marker_color=hourly_colors
             )])
             
             fig_hourly.update_layout(
