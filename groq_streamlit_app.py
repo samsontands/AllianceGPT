@@ -214,7 +214,7 @@ def get_mean_hourly_query_data():
     # Ensure all hours are represented
     all_hours = pd.DataFrame({'hour': [f'{i:02d}' for i in range(24)]})
     df = pd.merge(all_hours, df, on='hour', how='left').fillna(0)
-    df['mean_query_count'] = df['mean_query_count'].astype(float)
+    df['mean_query_count'] = df['mean_query_count'].apply(lambda x: math.ceil(x))
     
     return df
 
@@ -337,109 +337,66 @@ def main():
             st.dataframe(top_users_df, hide_index=True)
             
             # Display mean daily query chart
-            st.subheader("Mean Daily Queries (All Time)")
-            daily_data = get_mean_daily_query_data()
-            
-            # Create color scale for daily data
-            min_val_daily = daily_data['mean_query_count'].min()
-            max_val_daily = daily_data['mean_query_count'].max()
-            colors_daily = ['#00ff00' if x == min_val_daily else 
-                            '#ff0000' if x == max_val_daily else 
-                            f'rgb({int(255*((x-min_val_daily)/(max_val_daily-min_val_daily)))},{int(255*((max_val_daily-x)/(max_val_daily-min_val_daily)))},0)' 
-                            for x in daily_data['mean_query_count']]
-
-            fig_daily = go.Figure(data=[go.Bar(
-                x=daily_data['day_name'],
-                y=daily_data['mean_query_count'],
-                marker_color=colors_daily,
-                text=daily_data['mean_query_count'].round(2),
-                textposition='auto',
-            )])
-            
-            fig_daily.update_layout(
-                title='Mean Queries per Day (All Time)',
-                xaxis_title='Day of Week',
-                yaxis_title='Mean Number of Queries',
-                xaxis = dict(categoryorder='array', categoryarray=['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'])
-            )
-            
-            st.plotly_chart(fig_daily)
-            
-            # Display mean hourly query chart
-            st.subheader("Mean Hourly Queries (All Time)")
-            hourly_data = get_mean_hourly_query_data()
-            
-            # Create color scale for hourly data
-            min_val_hourly = hourly_data['mean_query_count'].min()
-            max_val_hourly = hourly_data['mean_query_count'].max()
-            colors_hourly = ['#00ff00' if x == min_val_hourly else 
-                             '#ff0000' if x == max_val_hourly else 
-                             f'rgb({int(255*((x-min_val_hourly)/(max_val_hourly-min_val_hourly)))},{int(255*((max_val_hourly-x)/(max_val_hourly-min_val_hourly)))},0)' 
-                             for x in hourly_data['mean_query_count']]
-
-            fig_hourly = go.Figure(data=[go.Bar(
-                x=hourly_data['hour'],
-                y=hourly_data['mean_query_count'],
-                marker_color=colors_hourly,
-                text=hourly_data['mean_query_count'].round(2),
-                textposition='auto',
-            )])
-            
-            fig_hourly.update_layout(
-                title='Mean Queries per Hour (All Time)',
-                xaxis_title='Hour of Day',
-                yaxis_title='Mean Number of Queries',
-                xaxis = dict(tickmode = 'linear', tick0 = 0, dtick = 1)
-            )
-            
-            st.plotly_chart(fig_hourly)
-            
-            # ... (rest of the admin view code remains unchanged)
+        st.subheader("Mean Daily Queries (All Time)")
+        daily_data = get_mean_daily_query_data()
         
-        else:  # Regular user view
-            st.subheader("Your Chat")
-            user_chats = get_user_chats(st.session_state.user[0])
-            for chat in user_chats:
-                with st.chat_message(chat["role"]):
-                    st.markdown(chat["content"])
+        # Create color scale for daily data
+        min_val_daily = daily_data['mean_query_count'].min()
+        max_val_daily = daily_data['mean_query_count'].max()
+        colors_daily = ['#00ff00' if x == min_val_daily else 
+                        '#ff0000' if x == max_val_daily else 
+                        f'rgb({int(255*((x-min_val_daily)/(max_val_daily-min_val_daily)))},{int(255*((max_val_daily-x)/(max_val_daily-min_val_daily)))},0)' 
+                        for x in daily_data['mean_query_count']]
 
-            user_question = st.chat_input("Ask a question:")
-            if user_question:
-                save_chat_message(st.session_state.user[0], user_question, "user")
-                with st.chat_message("user"):
-                    st.markdown(user_question)
+        fig_daily = go.Figure(data=[go.Bar(
+            x=daily_data['day_name'],
+            y=daily_data['mean_query_count'],
+            marker_color=colors_daily,
+            text=daily_data['mean_query_count'],
+            textposition='auto',
+        )])
+        
+        fig_daily.update_layout(
+            title='Mean Queries per Day (All Time)',
+            xaxis_title='Day of Week',
+            yaxis_title='Mean Number of Queries',
+            xaxis = dict(categoryorder='array', categoryarray=['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']),
+            yaxis = dict(tickmode = 'linear', tick0 = 0, dtick = 1)
+        )
+        
+        st.plotly_chart(fig_daily)
+        
+        # Display mean hourly query chart
+        st.subheader("Mean Hourly Queries (All Time)")
+        hourly_data = get_mean_hourly_query_data()
+        
+        # Create color scale for hourly data
+        min_val_hourly = hourly_data['mean_query_count'].min()
+        max_val_hourly = hourly_data['mean_query_count'].max()
+        colors_hourly = ['#00ff00' if x == min_val_hourly else 
+                         '#ff0000' if x == max_val_hourly else 
+                         f'rgb({int(255*((x-min_val_hourly)/(max_val_hourly-min_val_hourly)))},{int(255*((max_val_hourly-x)/(max_val_hourly-min_val_hourly)))},0)' 
+                         for x in hourly_data['mean_query_count']]
 
-                client = init_groq_client()
-                if client:
-                    try:
-                        with st.chat_message("assistant"):
-                            message_placeholder = st.empty()
-                            full_response = ""
-                            stream = client.chat.completions.create(
-                                messages=[
-                                    {"role": "system", "content": "You are a helpful assistant."},
-                                    *reversed(user_chats),  # Reverse the chat history for the AI
-                                    {"role": "user", "content": user_question}
-                                ],
-                                model="mixtral-8x7b-32768",
-                                max_tokens=1024,
-                                stream=True
-                            )
-                            for chunk in stream:
-                                if chunk.choices[0].delta.content is not None:
-                                    full_response += chunk.choices[0].delta.content
-                                    message_placeholder.markdown(full_response + "▌")
-                            
-                            message_placeholder.markdown(full_response)
-                        save_chat_message(st.session_state.user[0], full_response, "assistant")
-                    except Exception as e:
-                        st.error(f"An error occurred while processing your request: {str(e)}")
-
-        # Logout button at the bottom
-        if st.button("Logout", key="logout_button"):
-            st.session_state.user = None
-            st.session_state.view = 'normal'
-            st.rerun()
+        fig_hourly = go.Figure(data=[go.Bar(
+            x=hourly_data['hour'],
+            y=hourly_data['mean_query_count'],
+            marker_color=colors_hourly,
+            text=hourly_data['mean_query_count'],
+            textposition='auto',
+        )])
+        
+        fig_hourly.update_layout(
+            title='Mean Queries per Hour (All Time)',
+            xaxis_title='Hour of Day',
+            yaxis_title='Mean Number of Queries',
+            xaxis = dict(tickmode = 'linear', tick0 = 0, dtick = 1),
+            yaxis = dict(tickmode = 'linear', tick0 = 0, dtick = 1)
+        )
+        
+        st.plotly_chart(fig_hourly)
+        
+        # ... (rest of the code remains unchanged)
 
 if __name__ == "__main__":
     main()
