@@ -74,10 +74,40 @@ def save_chat_message(user_id, message, role):
 def get_user_chats(user_id):
     conn = sqlite3.connect('chat_app.db')
     c = conn.cursor()
-    c.execute("SELECT message, role FROM chats WHERE user_id=? ORDER BY timestamp", (user_id,))
+    c.execute("SELECT message, role FROM chats WHERE user_id=? ORDER BY timestamp DESC", (user_id,))
     chats = c.fetchall()
     conn.close()
     return [{"role": role, "content": message} for message, role in chats]
+
+# Function to get mean daily query data for all time (user messages only)
+def get_mean_daily_query_data():
+    conn = sqlite3.connect('chat_app.db')
+    query = """
+    SELECT 
+        strftime('%w', timestamp) as day_of_week,
+        COUNT(*) * 1.0 / (
+            SELECT COUNT(DISTINCT DATE(timestamp))
+            FROM chats
+            WHERE role = 'user'
+        ) as mean_query_count
+    FROM chats
+    WHERE role = 'user'
+    GROUP BY day_of_week
+    ORDER BY day_of_week
+    """
+    df = pd.read_sql_query(query, conn)
+    conn.close()
+    
+    # Ensure all days are represented
+    all_days = pd.DataFrame({'day_of_week': [str(i) for i in range(7)]})
+    df = pd.merge(all_days, df, on='day_of_week', how='left').fillna(0)
+    df['mean_query_count'] = df['mean_query_count'].astype(float)
+    df['day_name'] = df['day_of_week'].map({
+        '0': 'Sunday', '1': 'Monday', '2': 'Tuesday', '3': 'Wednesday',
+        '4': 'Thursday', '5': 'Friday', '6': 'Saturday'
+    })
+    
+    return df
 
 # Get all chats (for admin)
 def get_all_chats():
@@ -261,10 +291,6 @@ def main():
     
     else:
         st.write(f"Welcome, {st.session_state.user[1]}!")
-        if st.button("Logout"):
-            st.session_state.user = None
-            st.session_state.view = 'normal'
-            st.rerun()
 
         if st.session_state.user[3]:  # Admin user
             st.sidebar.title("Admin Controls")
@@ -308,31 +334,31 @@ def main():
             top_users_df = get_top_users()
             st.dataframe(top_users_df, hide_index=True)
             
-            # Display mean hourly query chart
-            st.subheader("Mean Hourly Queries (All Time)")
-            hourly_data = get_mean_hourly_query_data()
+            # Display mean daily query chart
+            st.subheader("Mean Daily Queries (All Time)")
+            daily_data = get_mean_daily_query_data()
             
             # Create color scale
-            min_val = hourly_data['mean_query_count'].min()
-            max_val = hourly_data['mean_query_count'].max()
+            min_val = daily_data['mean_query_count'].min()
+            max_val = daily_data['mean_query_count'].max()
             colors = ['#00ff00' if x == min_val else 
                       '#ff0000' if x == max_val else 
                       f'rgb({int(255*((x-min_val)/(max_val-min_val)))},{int(255*((max_val-x)/(max_val-min_val)))},0)' 
-                      for x in hourly_data['mean_query_count']]
+                      for x in daily_data['mean_query_count']]
 
             fig = go.Figure(data=[go.Bar(
-                x=hourly_data['hour'],
-                y=hourly_data['mean_query_count'],
+                x=daily_data['day_name'],
+                y=daily_data['mean_query_count'],
                 marker_color=colors,
-                text=hourly_data['mean_query_count'].round(2),
+                text=daily_data['mean_query_count'].round(2),
                 textposition='auto',
             )])
             
             fig.update_layout(
-                title='Mean Queries per Hour (All Time)',
-                xaxis_title='Hour of Day',
+                title='Mean Queries per Day (All Time)',
+                xaxis_title='Day of Week',
                 yaxis_title='Mean Number of Queries',
-                xaxis = dict(tickmode = 'linear', tick0 = 0, dtick = 1)
+                xaxis = dict(categoryorder='array', categoryarray=['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'])
             )
             
             st.plotly_chart(fig)
@@ -374,7 +400,7 @@ def main():
                             stream = client.chat.completions.create(
                                 messages=[
                                     {"role": "system", "content": "You are a helpful assistant."},
-                                    *user_chats,
+                                    *reversed(user_chats),  # Reverse the chat history for the AI
                                     {"role": "user", "content": user_question}
                                 ],
                                 model="mixtral-8x7b-32768",
@@ -390,6 +416,12 @@ def main():
                         save_chat_message(st.session_state.user[0], full_response, "assistant")
                     except Exception as e:
                         st.error(f"An error occurred while processing your request: {str(e)}")
+
+        # Logout button at the bottom
+        if st.button("Logout", key="logout_button"):
+            st.session_state.user = None
+            st.session_state.view = 'normal'
+            st.rerun()
 
 if __name__ == "__main__":
     main()
