@@ -20,12 +20,12 @@ def init_db():
     c.execute('''CREATE TABLE IF NOT EXISTS chats
                  (id INTEGER PRIMARY KEY, user_id INTEGER, message TEXT, role TEXT, timestamp TEXT)''')
     
-    # Check if admin exists, if not, create the fixed admin account
-    c.execute("SELECT * FROM users WHERE username=?", ('samson tan',))
+    # Check if admin exists, if not, create the admin account using Streamlit secrets
+    c.execute("SELECT * FROM users WHERE username=?", (st.secrets["ADMIN_USERNAME"],))
     if not c.fetchone():
-        hashed_password = bcrypt.hashpw('117853'.encode('utf-8'), bcrypt.gensalt())
+        hashed_password = bcrypt.hashpw(st.secrets["ADMIN_PASSWORD"].encode('utf-8'), bcrypt.gensalt())
         c.execute("INSERT INTO users (username, password, is_admin) VALUES (?, ?, ?)",
-                  ('samson tan', hashed_password, 1))
+                  (st.secrets["ADMIN_USERNAME"], hashed_password, 1))
     
     conn.commit()
     conn.close()
@@ -51,6 +51,9 @@ def register_user(username, password):
     conn = sqlite3.connect('chat_app.db')
     c = conn.cursor()
     try:
+        if username == st.secrets["ADMIN_USERNAME"]:
+            st.error("This username is reserved. Please choose a different username.")
+            return False
         c.execute("INSERT INTO users (username, password, is_admin) VALUES (?, ?, 0)",
                   (username, hashed_password))
         conn.commit()
@@ -282,8 +285,6 @@ def main():
             if st.button("Sign Up"):
                 if not new_username or not new_password:
                     st.error("Username and password cannot be empty.")
-                elif new_username == 'samson tan':
-                    st.error("This username is reserved. Please choose a different username.")
                 elif register_user(new_username, new_password):
                     st.success("Account created successfully. Please log in.")
                 else:
