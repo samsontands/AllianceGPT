@@ -21,14 +21,15 @@ def init_db():
                  (id INTEGER PRIMARY KEY, user_id INTEGER, message TEXT, role TEXT, timestamp TEXT)''')
     
     # Check if admin exists, if not, create the fixed admin account
-    c.execute("SELECT * FROM users WHERE username=?", ('samson tan',))
+    c.execute("SELECT * FROM users WHERE username=?", (st.secrets["ADMIN_USERNAME"],))
     if not c.fetchone():
-        hashed_password = bcrypt.hashpw('117853'.encode('utf-8'), bcrypt.gensalt())
+        hashed_password = bcrypt.hashpw(st.secrets["ADMIN_PASSWORD"].encode('utf-8'), bcrypt.gensalt())
         c.execute("INSERT INTO users (username, password, is_admin) VALUES (?, ?, ?)",
-                  ('samson tan', hashed_password, 1))
+                  (st.secrets["ADMIN_USERNAME"], hashed_password, 1))
     
     conn.commit()
     conn.close()
+
 
 # User authentication
 def authenticate(username, password):
@@ -282,7 +283,7 @@ def main():
             if st.button("Sign Up"):
                 if not new_username or not new_password:
                     st.error("Username and password cannot be empty.")
-                elif new_username == 'samson tan':
+                elif new_username == st.secrets["ADMIN_USERNAME"]:
                     st.error("This username is reserved. Please choose a different username.")
                 elif register_user(new_username, new_password):
                     st.success("Account created successfully. Please log in.")
