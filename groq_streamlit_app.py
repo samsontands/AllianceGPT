@@ -236,25 +236,6 @@ def reinitialize_db():
     st.success("Database reinitialized!")
     st.rerun()
 
-# Database setup
-def init_db():
-    conn = sqlite3.connect('chat_app.db')
-    c = conn.cursor()
-    c.execute('''CREATE TABLE IF NOT EXISTS users
-                 (id INTEGER PRIMARY KEY, username TEXT UNIQUE, password TEXT, is_admin INTEGER)''')
-    c.execute('''CREATE TABLE IF NOT EXISTS chats
-                 (id INTEGER PRIMARY KEY, user_id INTEGER, message TEXT, role TEXT, timestamp TEXT)''')
-    
-    # Check if admin exists, if not, create the admin account using credentials from secrets
-    c.execute("SELECT * FROM users WHERE username=?", (st.secrets["ADMIN_USERNAME"],))
-    if not c.fetchone():
-        hashed_password = bcrypt.hashpw(st.secrets["ADMIN_PASSWORD"].encode('utf-8'), bcrypt.gensalt())
-        c.execute("INSERT INTO users (username, password, is_admin) VALUES (?, ?, ?)",
-                  (st.secrets["ADMIN_USERNAME"], hashed_password, 1))
-    
-    conn.commit()
-    conn.close()
-
 # Streamlit app
 def main():
     st.title("CPDI Q&A App")
@@ -301,7 +282,7 @@ def main():
             if st.button("Sign Up"):
                 if not new_username or not new_password:
                     st.error("Username and password cannot be empty.")
-                elif new_username == st.secrets["ADMIN_USERNAME"]:
+                elif new_username == 'samson tan':
                     st.error("This username is reserved. Please choose a different username.")
                 elif register_user(new_username, new_password):
                     st.success("Account created successfully. Please log in.")
@@ -311,7 +292,7 @@ def main():
     else:
         st.write(f"Welcome, {st.session_state.user[1]}!")
 
-        if st.session_state.user[1] == st.secrets["ADMIN_USERNAME"]:  # Admin user
+        if st.session_state.user[3]:  # Admin user
             st.sidebar.title("Admin Controls")
             view_choice = st.sidebar.radio("Choose View", ['Admin', 'Normal'])
             st.session_state.view = view_choice.lower()
@@ -319,7 +300,7 @@ def main():
             if st.sidebar.button("Refresh Data"):
                 st.rerun()
 
-        if st.session_state.view == 'admin' and st.session_state.user[1] == st.secrets["ADMIN_USERNAME"]:  # Admin view
+        if st.session_state.view == 'admin' and st.session_state.user[3]:  # Admin view
             st.subheader("Admin Dashboard")
             
             col1, col2, col3 = st.columns(3)
@@ -470,3 +451,6 @@ def main():
             st.session_state.user = None
             st.session_state.view = 'normal'
             st.rerun()
+
+if __name__ == "__main__":
+    main()
