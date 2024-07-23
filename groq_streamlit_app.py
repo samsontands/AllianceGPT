@@ -301,14 +301,14 @@ def main():
             if st.button("Sign Up"):
                 if not new_username or not new_password:
                     st.error("Username and password cannot be empty.")
-                elif new_username == 'samson tan':
+                elif new_username == st.secrets["ADMIN_USERNAME"]:
                     st.error("This username is reserved. Please choose a different username.")
                 elif register_user(new_username, new_password):
                     st.success("Account created successfully. Please log in.")
                 else:
                     st.error("Username already exists")
     
-     else:
+    else:
         st.write(f"Welcome, {st.session_state.user[1]}!")
 
         if st.session_state.user[1] == st.secrets["ADMIN_USERNAME"]:  # Admin user
@@ -470,6 +470,3 @@ def main():
             st.session_state.user = None
             st.session_state.view = 'normal'
             st.rerun()
-
-if __name__ == "__main__":
-    main()
