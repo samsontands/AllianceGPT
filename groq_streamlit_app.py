@@ -308,7 +308,7 @@ def main():
                 else:
                     st.error("Username already exists")
     
- else:
+     else:
         st.write(f"Welcome, {st.session_state.user[1]}!")
 
         if st.session_state.user[1] == st.secrets["ADMIN_USERNAME"]:  # Admin user
