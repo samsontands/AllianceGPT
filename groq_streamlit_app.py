@@ -292,7 +292,7 @@ def main():
     else:
         st.write(f"Welcome, {st.session_state.user[1]}!")
 
-        if st.session_state.user[3]:  # Admin user
+        if st.session_state.user[1] == st.secrets["ADMIN_USERNAME"]:  # Admin user
             st.sidebar.title("Admin Controls")
             view_choice = st.sidebar.radio("Choose View", ['Admin', 'Normal'])
             st.session_state.view = view_choice.lower()
@@ -300,7 +300,7 @@ def main():
             if st.sidebar.button("Refresh Data"):
                 st.rerun()
 
-        if st.session_state.view == 'admin' and st.session_state.user[3]:  # Admin view
+        if st.session_state.view == 'admin' and st.session_state.user[1] == st.secrets["ADMIN_USERNAME"]:  # Admin view
             st.subheader("Admin Dashboard")
             
             col1, col2, col3 = st.columns(3)
