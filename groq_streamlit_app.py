@@ -43,6 +43,23 @@ def authenticate(username, password):
         return user
     return None
 
+# Add this function to delete a user
+def delete_user(username):
+    conn = sqlite3.connect('chat_app.db')
+    c = conn.cursor()
+    try:
+        # First, delete all chats associated with the user
+        c.execute("DELETE FROM chats WHERE user_id = (SELECT id FROM users WHERE username = ?)", (username,))
+        # Then, delete the user
+        c.execute("DELETE FROM users WHERE username = ?", (username,))
+        conn.commit()
+        return True
+    except sqlite3.Error as e:
+        print(f"An error occurred: {e}")
+        return False
+    finally:
+        conn.close()
+
 # User registration
 def register_user(username, password):
     if not username or not password:
@@ -236,6 +253,15 @@ def reinitialize_db():
     st.success("Database reinitialized!")
     st.rerun()
 
+# Add this function to get all users
+def get_all_users():
+    conn = sqlite3.connect('chat_app.db')
+    c = conn.cursor()
+    c.execute("SELECT username FROM users")
+    users = c.fetchall()
+    conn.close()
+    return users
+
 # Streamlit app
 def main():
     st.title("CPDI Q&A App")
@@ -389,6 +415,17 @@ def main():
                 yaxis_title='Mean Number of Queries',
                 xaxis = dict(tickmode = 'linear', tick0 = 0, dtick = 1)
             )
+            
+             # Add a new section for user deletion
+            st.subheader("Delete User")
+            users_to_delete = [user[0] for user in get_all_users() if user[0] != 'samson tan']
+            user_to_delete = st.selectbox("Select user to delete", users_to_delete)
+            if st.button("Delete User"):
+                if delete_user(user_to_delete):
+                    st.success(f"User {user_to_delete} has been deleted.")
+                    st.rerun()
+                else:
+                    st.error("An error occurred while trying to delete the user.")
             
             st.plotly_chart(fig_hourly)
             
