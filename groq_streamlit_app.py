@@ -15,10 +15,22 @@ malaysia_tz = pytz.timezone('Asia/Kuala_Lumpur')
 def init_db():
     conn = sqlite3.connect('chat_app.db')
     c = conn.cursor()
+    
+    # Create users table if it doesn't exist
     c.execute('''CREATE TABLE IF NOT EXISTS users
-                 (id INTEGER PRIMARY KEY, username TEXT UNIQUE, password TEXT, is_admin INTEGER, nickname TEXT)''')
+                 (id INTEGER PRIMARY KEY, username TEXT UNIQUE, password TEXT, is_admin INTEGER)''')
+    
+    # Add nickname column to users table if it doesn't exist
+    c.execute("PRAGMA table_info(users)")
+    columns = [column[1] for column in c.fetchall()]
+    if 'nickname' not in columns:
+        c.execute("ALTER TABLE users ADD COLUMN nickname TEXT")
+    
+    # Create chats table if it doesn't exist
     c.execute('''CREATE TABLE IF NOT EXISTS chats
                  (id INTEGER PRIMARY KEY, user_id INTEGER, message TEXT, role TEXT, timestamp TEXT)''')
+    
+    # Create community_messages table if it doesn't exist
     c.execute('''CREATE TABLE IF NOT EXISTS community_messages
                  (id INTEGER PRIMARY KEY, user_id INTEGER, message TEXT, timestamp TEXT)''')
     
@@ -60,7 +72,9 @@ def get_community_messages(limit=100):
     conn = sqlite3.connect('chat_app.db')
     c = conn.cursor()
     c.execute("""
-        SELECT users.nickname, community_messages.message, community_messages.timestamp 
+        SELECT COALESCE(users.nickname, users.username) as display_name, 
+               community_messages.message, 
+               community_messages.timestamp 
         FROM community_messages 
         JOIN users ON community_messages.user_id = users.id 
         ORDER BY community_messages.timestamp DESC LIMIT ?
