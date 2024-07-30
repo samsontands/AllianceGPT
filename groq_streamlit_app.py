@@ -41,6 +41,11 @@ def init_db():
         c.execute("INSERT INTO users (username, password, is_admin, nickname) VALUES (?, ?, ?, ?)",
                   ('samson tan', hashed_password, 1, 'Admin'))
     
+    # Create private_messages table
+    c.execute('''CREATE TABLE IF NOT EXISTS private_messages
+                 (id INTEGER PRIMARY KEY, sender_id INTEGER, receiver_id INTEGER, 
+                  message TEXT, timestamp TEXT)''')
+    
     conn.commit()
     conn.close()
 
@@ -51,13 +56,47 @@ def set_nickname(user_id, nickname):
     conn.commit()
     conn.close()
 
+# Add function to get all users for private messaging
+def get_all_users_for_messaging():
+    conn = sqlite3.connect('chat_app.db')
+    c = conn.cursor()
+    c.execute("SELECT id, COALESCE(nickname, username) as display_name FROM users")
+    users = c.fetchall()
+    conn.close()
+    return users
+    
+# Add function to save private message
+def save_private_message(sender_id, receiver_id, message):
+    conn = sqlite3.connect('chat_app.db')
+    c = conn.cursor()
+    timestamp = datetime.now(malaysia_tz).strftime('%Y-%m-%d %H:%M:%S')
+    c.execute("INSERT INTO private_messages (sender_id, receiver_id, message, timestamp) VALUES (?, ?, ?, ?)",
+              (sender_id, receiver_id, message, timestamp))
+    conn.commit()
+    conn.close()
+
+# Add function to get private messages
+def get_private_messages(user1_id, user2_id):
+    conn = sqlite3.connect('chat_app.db')
+    c = conn.cursor()
+    c.execute("""
+        SELECT sender_id, message, timestamp
+        FROM private_messages
+        WHERE (sender_id = ? AND receiver_id = ?) OR (sender_id = ? AND receiver_id = ?)
+        ORDER BY timestamp ASC
+    """, (user1_id, user2_id, user2_id, user1_id))
+    messages = c.fetchall()
+    conn.close()
+    return messages
+    
+# Update get_nickname function
 def get_nickname(user_id):
     conn = sqlite3.connect('chat_app.db')
     c = conn.cursor()
     c.execute("SELECT nickname FROM users WHERE id = ?", (user_id,))
     nickname = c.fetchone()[0]
     conn.close()
-    return nickname if nickname else None
+    return nickname if nickname else "Anonymous"
 
 def save_community_message(user_id, message):
     conn = sqlite3.connect('chat_app.db')
@@ -497,7 +536,7 @@ def main():
             )
         
         else:  # Regular user view
-            tab1, tab2, tab3 = st.tabs(["AI Chat", "Community", "Settings"])
+            tab1, tab2, tab3, tab4 = st.tabs(["AI Chat", "Community", "Private Chat", "Settings"])
 
             with tab1:
                 st.subheader("Your AI Chat")
@@ -541,25 +580,70 @@ def main():
             with tab2:
                 st.subheader("Community Chat")
                 community_messages = get_community_messages()
+                
+                # Custom CSS for chat-like display
+                st.markdown("""
+                    <style>
+                        .chat-message {
+                            padding: 10px;
+                            border-radius: 10px;
+                            margin-bottom: 10px;
+                            max-width: 80%;
+                            word-wrap: break-word;
+                        }
+                        .user-message {
+                            background-color: #e6f3ff;
+                            float: right;
+                        }
+                        .other-message {
+                            background-color: #f0f0f0;
+                            float: left;
+                        }
+                        .clearfix::after {
+                            content: "";
+                            clear: both;
+                            display: table;
+                        }
+                    </style>
+                """, unsafe_allow_html=True)
+
                 for nickname, message, timestamp in community_messages:
-                    st.text(f"{nickname} ({timestamp}): {message}")
+                    if nickname == get_nickname(st.session_state.user[0]):
+                        st.markdown(f'<div class="chat-message user-message">{message}<br><small>{timestamp}</small></div><div class="clearfix"></div>', unsafe_allow_html=True)
+                    else:
+                        st.markdown(f'<div class="chat-message other-message"><strong>{nickname}</strong>: {message}<br><small>{timestamp}</small></div><div class="clearfix"></div>', unsafe_allow_html=True)
                 
                 community_message = st.text_input("Type your message for the community:")
                 if st.button("Send to Community"):
-                    nickname = get_nickname(st.session_state.user[0])
-                    if nickname:
-                        save_community_message(st.session_state.user[0], community_message)
-                        st.success("Message sent to the community!")
-                        st.rerun()
-                    else:
-                        st.error("Please set your nickname in the Settings tab before sending a message.")
+                    save_community_message(st.session_state.user[0], community_message)
+                    st.success("Message sent to the community!")
+                    st.rerun()
 
             with tab3:
+                st.subheader("Private Chat")
+                users = get_all_users_for_messaging()
+                chat_with = st.selectbox("Select user to chat with:", [user[1] for user in users if user[0] != st.session_state.user[0]])
+                receiver_id = next(user[0] for user in users if user[1] == chat_with)
+                
+                private_messages = get_private_messages(st.session_state.user[0], receiver_id)
+                for sender_id, message, timestamp in private_messages:
+                    if sender_id == st.session_state.user[0]:
+                        st.markdown(f'<div class="chat-message user-message">{message}<br><small>{timestamp}</small></div><div class="clearfix"></div>', unsafe_allow_html=True)
+                    else:
+                        st.markdown(f'<div class="chat-message other-message">{message}<br><small>{timestamp}</small></div><div class="clearfix"></div>', unsafe_allow_html=True)
+                
+                private_message = st.text_input(f"Type your message to {chat_with}:")
+                if st.button("Send Private Message"):
+                    save_private_message(st.session_state.user[0], receiver_id, private_message)
+                    st.success("Private message sent!")
+                    st.rerun()
+
+            with tab4:
                 st.subheader("Settings")
                 current_nickname = get_nickname(st.session_state.user[0])
-                new_nickname = st.text_input("Set your nickname:", value=current_nickname if current_nickname else "")
+                new_nickname = st.text_input("Set your nickname (leave blank for anonymous):", value=current_nickname if current_nickname != "Anonymous" else "")
                 if st.button("Update Nickname"):
-                    set_nickname(st.session_state.user[0], new_nickname)
+                    set_nickname(st.session_state.user[0], new_nickname if new_nickname else None)
                     st.success("Nickname updated successfully!")
 
         # Logout button at the bottom
