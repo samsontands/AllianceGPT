@@ -357,7 +357,6 @@ def get_all_users():
 def main():
     st.title("CPDI Q&A App")
     
-    # Display current time in Malaysia timezone
     st.write(f"Current time: {datetime.now(malaysia_tz).strftime('%Y-%m-%d %H:%M:%S')} (GMT+8)")
     
     init_db()
@@ -376,7 +375,6 @@ def main():
             password = st.text_input("Password", type="password", key="password")
             login_button = st.button("Login")
             
-            # Check if Enter key is pressed
             if password and st.session_state.password != password:
                 login_button = True
             
@@ -409,7 +407,7 @@ def main():
     else:
         st.write(f"Welcome, {st.session_state.user[1]}!")
 
-        if st.session_state.user[3]:  # Admin user
+        if st.session_state.user[3]:
             st.sidebar.title("Admin Controls")
             view_choice = st.sidebar.radio("Choose View", ['Admin', 'Normal'])
             st.session_state.view = view_choice.lower()
@@ -417,7 +415,7 @@ def main():
             if st.sidebar.button("Refresh Data"):
                 st.rerun()
 
-        if st.session_state.view == 'admin' and st.session_state.user[3]:  # Admin view
+        if st.session_state.view == 'admin' and st.session_state.user[3]:
             st.subheader("Admin Dashboard")
             
             col1, col2, col3 = st.columns(3)
@@ -432,7 +430,6 @@ def main():
                 if st.button("Reinitialize Database"):
                     reinitialize_db()
             
-            # Display user statistics
             total_users, active_users_24h, total_messages = get_user_stats()
             current_active_users = get_current_active_users()
         
@@ -446,16 +443,13 @@ def main():
             with col4:
                 st.metric("Total Messages", total_messages)
             
-            # Display top users
             st.subheader("Top Users")
             top_users_df = get_top_users()
             st.dataframe(top_users_df, hide_index=True)
             
-            # Display mean daily query chart
             st.subheader("Mean Daily Queries (All Time)")
             daily_data = get_mean_daily_query_data()
             
-            # Create color scale for daily chart
             daily_min = daily_data['mean_query_count'].min()
             daily_max = daily_data['mean_query_count'].max()
             daily_colors = ['#00ff00' if x == daily_min else 
@@ -480,11 +474,9 @@ def main():
             
             st.plotly_chart(fig_daily)
 
-            # Display mean hourly query chart
             st.subheader("Mean Hourly Queries (All Time)")
             hourly_data = get_mean_hourly_query_data()
             
-            # Create color scale for hourly chart
             hourly_min = hourly_data['mean_query_count'].min()
             hourly_max = hourly_data['mean_query_count'].max()
             hourly_colors = ['#00ff00' if x == hourly_min else 
@@ -507,7 +499,6 @@ def main():
                 xaxis = dict(tickmode = 'linear', tick0 = 0, dtick = 1)
             )
             
-            # Add a new section for user deletion
             st.subheader("Delete User")
             users_to_delete = [user[0] for user in get_all_users() if user[0] != 'samson tan']
             user_to_delete = st.selectbox("Select user to delete", users_to_delete)
@@ -523,10 +514,8 @@ def main():
             st.subheader("All Chats")
             all_chats_df = get_all_chats()
             
-            # Display chats in the Streamlit app
             st.dataframe(all_chats_df)
             
-            # Add a download button
             csv = convert_df_to_csv(all_chats_df)
             st.download_button(
                 label="Download chat logs as CSV",
@@ -535,7 +524,7 @@ def main():
                 mime="text/csv",
             )
         
-        else:  # Regular user view
+        else:
             tab1, tab2, tab3, tab4 = st.tabs(["AI Chat", "Community", "Private Chat", "Settings"])
 
             with tab1:
@@ -581,7 +570,6 @@ def main():
                 st.subheader("Community Chat")
                 community_messages = get_community_messages()
                 
-                # Custom CSS for chat-like display
                 st.markdown("""
                     <style>
                         .chat-message {
@@ -607,17 +595,22 @@ def main():
                     </style>
                 """, unsafe_allow_html=True)
 
-                for nickname, message, timestamp in community_messages:
-                    if nickname == get_nickname(st.session_state.user[0]):
-                        st.markdown(f'<div class="chat-message user-message">{message}<br><small>{timestamp}</small></div><div class="clearfix"></div>', unsafe_allow_html=True)
-                    else:
-                        st.markdown(f'<div class="chat-message other-message"><strong>{nickname}</strong>: {message}<br><small>{timestamp}</small></div><div class="clearfix"></div>', unsafe_allow_html=True)
+                message_container = st.container()
+                new_message_placeholder = st.empty()
+
+                with message_container:
+                    for nickname, message, timestamp in reversed(community_messages):
+                        if nickname == get_nickname(st.session_state.user[0]):
+                            st.markdown(f'<div class="chat-message user-message">{message}<br><small>{timestamp}</small></div><div class="clearfix"></div>', unsafe_allow_html=True)
+                        else:
+                            st.markdown(f'<div class="chat-message other-message"><strong>{nickname}</strong>: {message}<br><small>{timestamp}</small></div><div class="clearfix"></div>', unsafe_allow_html=True)
                 
                 community_message = st.text_input("Type your message for the community:")
                 if st.button("Send to Community"):
                     save_community_message(st.session_state.user[0], community_message)
+                    with new_message_placeholder:
+                        st.markdown(f'<div class="chat-message user-message">{community_message}<br><small>{datetime.now(malaysia_tz).strftime("%Y-%m-%d %H:%M:%S")}</small></div><div class="clearfix"></div>', unsafe_allow_html=True)
                     st.success("Message sent to the community!")
-                    st.rerun()
 
             with tab3:
                 st.subheader("Private Chat")
@@ -626,17 +619,23 @@ def main():
                 receiver_id = next(user[0] for user in users if user[1] == chat_with)
                 
                 private_messages = get_private_messages(st.session_state.user[0], receiver_id)
-                for sender_id, message, timestamp in private_messages:
-                    if sender_id == st.session_state.user[0]:
-                        st.markdown(f'<div class="chat-message user-message">{message}<br><small>{timestamp}</small></div><div class="clearfix"></div>', unsafe_allow_html=True)
-                    else:
-                        st.markdown(f'<div class="chat-message other-message">{message}<br><small>{timestamp}</small></div><div class="clearfix"></div>', unsafe_allow_html=True)
+
+                private_message_container = st.container()
+                new_private_message_placeholder = st.empty()
+
+                with private_message_container:
+                    for sender_id, message, timestamp in reversed(private_messages):
+                        if sender_id == st.session_state.user[0]:
+                            st.markdown(f'<div class="chat-message user-message">{message}<br><small>{timestamp}</small></div><div class="clearfix"></div>', unsafe_allow_html=True)
+                        else:
+                            st.markdown(f'<div class="chat-message other-message">{message}<br><small>{timestamp}</small></div><div class="clearfix"></div>', unsafe_allow_html=True)
                 
                 private_message = st.text_input(f"Type your message to {chat_with}:")
                 if st.button("Send Private Message"):
                     save_private_message(st.session_state.user[0], receiver_id, private_message)
+                    with new_private_message_placeholder:
+                        st.markdown(f'<div class="chat-message user-message">{private_message}<br><small>{datetime.now(malaysia_tz).strftime("%Y-%m-%d %H:%M:%S")}</small></div><div class="clearfix"></div>', unsafe_allow_html=True)
                     st.success("Private message sent!")
-                    st.rerun()
 
             with tab4:
                 st.subheader("Settings")
@@ -646,7 +645,6 @@ def main():
                     set_nickname(st.session_state.user[0], new_nickname if new_nickname else None)
                     st.success("Nickname updated successfully!")
 
-        # Logout button at the bottom
         if st.button("Logout", key="logout_button"):
             st.session_state.user = None
             st.session_state.view = 'normal'
