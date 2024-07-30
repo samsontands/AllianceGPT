@@ -27,8 +27,49 @@ def init_db():
         c.execute("INSERT INTO users (username, password, is_admin) VALUES (?, ?, ?)",
                   ('samson tan', hashed_password, 1))
     
+    c.execute('''CREATE TABLE IF NOT EXISTS community_messages
+                 (id INTEGER PRIMARY KEY, user_id INTEGER, nickname TEXT, message TEXT, timestamp TEXT)''')
+    
+    # Add new column for nickname in users table if it doesn't exist
+    c.execute("PRAGMA table_info(users)")
+    columns = [column[1] for column in c.fetchall()]
+    if 'nickname' not in columns:
+        c.execute("ALTER TABLE users ADD COLUMN nickname TEXT")
+    
+    conn.commit()
+    conn.close())
+
+def set_nickname(user_id, nickname):
+    conn = sqlite3.connect('chat_app.db')
+    c = conn.cursor()
+    c.execute("UPDATE users SET nickname = ? WHERE id = ?", (nickname, user_id))
     conn.commit()
     conn.close()
+
+def get_nickname(user_id):
+    conn = sqlite3.connect('chat_app.db')
+    c = conn.cursor()
+    c.execute("SELECT nickname FROM users WHERE id = ?", (user_id,))
+    nickname = c.fetchone()[0]
+    conn.close()
+    return nickname if nickname else None
+
+def save_community_message(user_id, nickname, message):
+    conn = sqlite3.connect('chat_app.db')
+    c = conn.cursor()
+    timestamp = datetime.now(malaysia_tz).strftime('%Y-%m-%d %H:%M:%S')
+    c.execute("INSERT INTO community_messages (user_id, nickname, message, timestamp) VALUES (?, ?, ?, ?)",
+              (user_id, nickname, message, timestamp))
+    conn.commit()
+    conn.close()
+
+def get_community_messages(limit=100):
+    conn = sqlite3.connect('chat_app.db')
+    c = conn.cursor()
+    c.execute("SELECT nickname, message, timestamp FROM community_messages ORDER BY timestamp DESC LIMIT ?", (limit,))
+    messages = c.fetchall()
+    conn.close()
+    return messages
 
 # User authentication
 def authenticate(username, password):
@@ -262,7 +303,6 @@ def get_all_users():
     conn.close()
     return users
 
-# Streamlit app
 def main():
     st.title("CPDI Q&A App")
     
@@ -416,7 +456,7 @@ def main():
                 xaxis = dict(tickmode = 'linear', tick0 = 0, dtick = 1)
             )
             
-             # Add a new section for user deletion
+            # Add a new section for user deletion
             st.subheader("Delete User")
             users_to_delete = [user[0] for user in get_all_users() if user[0] != 'samson tan']
             user_to_delete = st.selectbox("Select user to delete", users_to_delete)
@@ -445,43 +485,70 @@ def main():
             )
         
         else:  # Regular user view
-            st.subheader("Your Chat")
-            user_chats = get_user_chats(st.session_state.user[0])
-            for chat in user_chats:
-                with st.chat_message(chat["role"]):
-                    st.markdown(chat["content"])
+            tab1, tab2, tab3 = st.tabs(["AI Chat", "Community", "Settings"])
 
-            user_question = st.chat_input("Ask a question:")
-            if user_question:
-                save_chat_message(st.session_state.user[0], user_question, "user")
-                with st.chat_message("user"):
-                    st.markdown(user_question)
+            with tab1:
+                st.subheader("Your AI Chat")
+                user_chats = get_user_chats(st.session_state.user[0])
+                for chat in user_chats:
+                    with st.chat_message(chat["role"]):
+                        st.markdown(chat["content"])
 
-                client = init_groq_client()
-                if client:
-                    try:
-                        with st.chat_message("assistant"):
-                            message_placeholder = st.empty()
-                            full_response = ""
-                            stream = client.chat.completions.create(
-                                messages=[
-                                    {"role": "system", "content": "You are a helpful assistant."},
-                                    *user_chats,
-                                    {"role": "user", "content": user_question}
-                                ],
-                                model="mixtral-8x7b-32768",
-                                max_tokens=1024,
-                                stream=True
-                            )
-                            for chunk in stream:
-                                if chunk.choices[0].delta.content is not None:
-                                    full_response += chunk.choices[0].delta.content
-                                    message_placeholder.markdown(full_response + "▌")
-                            
-                            message_placeholder.markdown(full_response)
-                        save_chat_message(st.session_state.user[0], full_response, "assistant")
-                    except Exception as e:
-                        st.error(f"An error occurred while processing your request: {str(e)}")
+                user_question = st.chat_input("Ask a question:")
+                if user_question:
+                    save_chat_message(st.session_state.user[0], user_question, "user")
+                    with st.chat_message("user"):
+                        st.markdown(user_question)
+
+                    client = init_groq_client()
+                    if client:
+                        try:
+                            with st.chat_message("assistant"):
+                                message_placeholder = st.empty()
+                                full_response = ""
+                                stream = client.chat.completions.create(
+                                    messages=[
+                                        {"role": "system", "content": "You are a helpful assistant."},
+                                        *user_chats,
+                                        {"role": "user", "content": user_question}
+                                    ],
+                                    model="mixtral-8x7b-32768",
+                                    max_tokens=1024,
+                                    stream=True
+                                )
+                                for chunk in stream:
+                                    if chunk.choices[0].delta.content is not None:
+                                        full_response += chunk.choices[0].delta.content
+                                        message_placeholder.markdown(full_response + "▌")
+                                
+                                message_placeholder.markdown(full_response)
+                            save_chat_message(st.session_state.user[0], full_response, "assistant")
+                        except Exception as e:
+                            st.error(f"An error occurred while processing your request: {str(e)}")
+
+            with tab2:
+                st.subheader("Community Chat")
+                community_messages = get_community_messages()
+                for nickname, message, timestamp in community_messages:
+                    st.text(f"{nickname} ({timestamp}): {message}")
+                
+                community_message = st.text_input("Type your message for the community:")
+                if st.button("Send to Community"):
+                    nickname = get_nickname(st.session_state.user[0])
+                    if nickname:
+                        save_community_message(st.session_state.user[0], nickname, community_message)
+                        st.success("Message sent to the community!")
+                        st.rerun()
+                    else:
+                        st.error("Please set your nickname in the Settings tab before sending a message.")
+
+            with tab3:
+                st.subheader("Settings")
+                current_nickname = get_nickname(st.session_state.user[0])
+                new_nickname = st.text_input("Set your nickname:", value=current_nickname if current_nickname else "")
+                if st.button("Update Nickname"):
+                    set_nickname(st.session_state.user[0], new_nickname)
+                    st.success("Nickname updated successfully!")
 
         # Logout button at the bottom
         if st.button("Logout", key="logout_button"):
