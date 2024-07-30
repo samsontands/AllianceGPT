@@ -16,28 +16,21 @@ def init_db():
     conn = sqlite3.connect('chat_app.db')
     c = conn.cursor()
     c.execute('''CREATE TABLE IF NOT EXISTS users
-                 (id INTEGER PRIMARY KEY, username TEXT UNIQUE, password TEXT, is_admin INTEGER)''')
+                 (id INTEGER PRIMARY KEY, username TEXT UNIQUE, password TEXT, is_admin INTEGER, nickname TEXT)''')
     c.execute('''CREATE TABLE IF NOT EXISTS chats
                  (id INTEGER PRIMARY KEY, user_id INTEGER, message TEXT, role TEXT, timestamp TEXT)''')
+    c.execute('''CREATE TABLE IF NOT EXISTS community_messages
+                 (id INTEGER PRIMARY KEY, user_id INTEGER, message TEXT, timestamp TEXT)''')
     
     # Check if admin exists, if not, create the fixed admin account
     c.execute("SELECT * FROM users WHERE username=?", ('samson tan',))
     if not c.fetchone():
         hashed_password = bcrypt.hashpw(admin_password.encode('utf-8'), bcrypt.gensalt())
-        c.execute("INSERT INTO users (username, password, is_admin) VALUES (?, ?, ?)",
-                  ('samson tan', hashed_password, 1))
-    
-    c.execute('''CREATE TABLE IF NOT EXISTS community_messages
-                 (id INTEGER PRIMARY KEY, user_id INTEGER, nickname TEXT, message TEXT, timestamp TEXT)''')
-    
-    # Add new column for nickname in users table if it doesn't exist
-    c.execute("PRAGMA table_info(users)")
-    columns = [column[1] for column in c.fetchall()]
-    if 'nickname' not in columns:
-        c.execute("ALTER TABLE users ADD COLUMN nickname TEXT")
+        c.execute("INSERT INTO users (username, password, is_admin, nickname) VALUES (?, ?, ?, ?)",
+                  ('samson tan', hashed_password, 1, 'Admin'))
     
     conn.commit()
-    conn.close())
+    conn.close()
 
 def set_nickname(user_id, nickname):
     conn = sqlite3.connect('chat_app.db')
@@ -54,19 +47,24 @@ def get_nickname(user_id):
     conn.close()
     return nickname if nickname else None
 
-def save_community_message(user_id, nickname, message):
+def save_community_message(user_id, message):
     conn = sqlite3.connect('chat_app.db')
     c = conn.cursor()
     timestamp = datetime.now(malaysia_tz).strftime('%Y-%m-%d %H:%M:%S')
-    c.execute("INSERT INTO community_messages (user_id, nickname, message, timestamp) VALUES (?, ?, ?, ?)",
-              (user_id, nickname, message, timestamp))
+    c.execute("INSERT INTO community_messages (user_id, message, timestamp) VALUES (?, ?, ?)",
+              (user_id, message, timestamp))
     conn.commit()
     conn.close()
 
 def get_community_messages(limit=100):
     conn = sqlite3.connect('chat_app.db')
     c = conn.cursor()
-    c.execute("SELECT nickname, message, timestamp FROM community_messages ORDER BY timestamp DESC LIMIT ?", (limit,))
+    c.execute("""
+        SELECT users.nickname, community_messages.message, community_messages.timestamp 
+        FROM community_messages 
+        JOIN users ON community_messages.user_id = users.id 
+        ORDER BY community_messages.timestamp DESC LIMIT ?
+    """, (limit,))
     messages = c.fetchall()
     conn.close()
     return messages
@@ -536,7 +534,7 @@ def main():
                 if st.button("Send to Community"):
                     nickname = get_nickname(st.session_state.user[0])
                     if nickname:
-                        save_community_message(st.session_state.user[0], nickname, community_message)
+                        save_community_message(st.session_state.user[0], community_message)
                         st.success("Message sent to the community!")
                         st.rerun()
                     else:
