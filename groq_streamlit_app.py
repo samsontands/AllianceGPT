@@ -15,112 +15,20 @@ malaysia_tz = pytz.timezone('Asia/Kuala_Lumpur')
 def init_db():
     conn = sqlite3.connect('chat_app.db')
     c = conn.cursor()
-    
-    # Create users table if it doesn't exist
     c.execute('''CREATE TABLE IF NOT EXISTS users
                  (id INTEGER PRIMARY KEY, username TEXT UNIQUE, password TEXT, is_admin INTEGER)''')
-    
-    # Add nickname column to users table if it doesn't exist
-    c.execute("PRAGMA table_info(users)")
-    columns = [column[1] for column in c.fetchall()]
-    if 'nickname' not in columns:
-        c.execute("ALTER TABLE users ADD COLUMN nickname TEXT")
-    
-    # Create chats table if it doesn't exist
     c.execute('''CREATE TABLE IF NOT EXISTS chats
                  (id INTEGER PRIMARY KEY, user_id INTEGER, message TEXT, role TEXT, timestamp TEXT)''')
-    
-    # Create community_messages table if it doesn't exist
-    c.execute('''CREATE TABLE IF NOT EXISTS community_messages
-                 (id INTEGER PRIMARY KEY, user_id INTEGER, message TEXT, timestamp TEXT)''')
     
     # Check if admin exists, if not, create the fixed admin account
     c.execute("SELECT * FROM users WHERE username=?", ('samson tan',))
     if not c.fetchone():
         hashed_password = bcrypt.hashpw(admin_password.encode('utf-8'), bcrypt.gensalt())
-        c.execute("INSERT INTO users (username, password, is_admin, nickname) VALUES (?, ?, ?, ?)",
-                  ('samson tan', hashed_password, 1, 'Admin'))
-    
-    # Create private_messages table
-    c.execute('''CREATE TABLE IF NOT EXISTS private_messages
-                 (id INTEGER PRIMARY KEY, sender_id INTEGER, receiver_id INTEGER, 
-                  message TEXT, timestamp TEXT)''')
+        c.execute("INSERT INTO users (username, password, is_admin) VALUES (?, ?, ?)",
+                  ('samson tan', hashed_password, 1))
     
     conn.commit()
     conn.close()
-
-def set_nickname(user_id, nickname):
-    conn = sqlite3.connect('chat_app.db')
-    c = conn.cursor()
-    c.execute("UPDATE users SET nickname = ? WHERE id = ?", (nickname, user_id))
-    conn.commit()
-    conn.close()
-
-# Add function to get all users for private messaging
-def get_all_users_for_messaging():
-    conn = sqlite3.connect('chat_app.db')
-    c = conn.cursor()
-    c.execute("SELECT id, COALESCE(nickname, username) as display_name FROM users")
-    users = c.fetchall()
-    conn.close()
-    return users
-    
-# Add function to save private message
-def save_private_message(sender_id, receiver_id, message):
-    conn = sqlite3.connect('chat_app.db')
-    c = conn.cursor()
-    timestamp = datetime.now(malaysia_tz).strftime('%Y-%m-%d %H:%M:%S')
-    c.execute("INSERT INTO private_messages (sender_id, receiver_id, message, timestamp) VALUES (?, ?, ?, ?)",
-              (sender_id, receiver_id, message, timestamp))
-    conn.commit()
-    conn.close()
-
-# Add function to get private messages
-def get_private_messages(user1_id, user2_id):
-    conn = sqlite3.connect('chat_app.db')
-    c = conn.cursor()
-    c.execute("""
-        SELECT sender_id, message, timestamp
-        FROM private_messages
-        WHERE (sender_id = ? AND receiver_id = ?) OR (sender_id = ? AND receiver_id = ?)
-        ORDER BY timestamp ASC
-    """, (user1_id, user2_id, user2_id, user1_id))
-    messages = c.fetchall()
-    conn.close()
-    return messages
-    
-# Update get_nickname function
-def get_nickname(user_id):
-    conn = sqlite3.connect('chat_app.db')
-    c = conn.cursor()
-    c.execute("SELECT nickname FROM users WHERE id = ?", (user_id,))
-    nickname = c.fetchone()[0]
-    conn.close()
-    return nickname if nickname else "Anonymous"
-
-def save_community_message(user_id, message):
-    conn = sqlite3.connect('chat_app.db')
-    c = conn.cursor()
-    timestamp = datetime.now(malaysia_tz).strftime('%Y-%m-%d %H:%M:%S')
-    c.execute("INSERT INTO community_messages (user_id, message, timestamp) VALUES (?, ?, ?)",
-              (user_id, message, timestamp))
-    conn.commit()
-    conn.close()
-
-def get_community_messages(limit=100):
-    conn = sqlite3.connect('chat_app.db')
-    c = conn.cursor()
-    c.execute("""
-        SELECT COALESCE(users.nickname, users.username) as display_name, 
-               community_messages.message, 
-               community_messages.timestamp 
-        FROM community_messages 
-        JOIN users ON community_messages.user_id = users.id 
-        ORDER BY community_messages.timestamp DESC LIMIT ?
-    """, (limit,))
-    messages = c.fetchall()
-    conn.close()
-    return messages
 
 # User authentication
 def authenticate(username, password):
@@ -354,6 +262,7 @@ def get_all_users():
     conn.close()
     return users
 
+# Streamlit app
 def main():
     st.title("CPDI Q&A App")
     
@@ -507,7 +416,7 @@ def main():
                 xaxis = dict(tickmode = 'linear', tick0 = 0, dtick = 1)
             )
             
-            # Add a new section for user deletion
+             # Add a new section for user deletion
             st.subheader("Delete User")
             users_to_delete = [user[0] for user in get_all_users() if user[0] != 'samson tan']
             user_to_delete = st.selectbox("Select user to delete", users_to_delete)
@@ -536,115 +445,43 @@ def main():
             )
         
         else:  # Regular user view
-            tab1, tab2, tab3, tab4 = st.tabs(["AI Chat", "Community", "Private Chat", "Settings"])
+            st.subheader("Your Chat")
+            user_chats = get_user_chats(st.session_state.user[0])
+            for chat in user_chats:
+                with st.chat_message(chat["role"]):
+                    st.markdown(chat["content"])
 
-            with tab1:
-                st.subheader("Your AI Chat")
-                user_chats = get_user_chats(st.session_state.user[0])
-                for chat in user_chats:
-                    with st.chat_message(chat["role"]):
-                        st.markdown(chat["content"])
+            user_question = st.chat_input("Ask a question:")
+            if user_question:
+                save_chat_message(st.session_state.user[0], user_question, "user")
+                with st.chat_message("user"):
+                    st.markdown(user_question)
 
-                user_question = st.chat_input("Ask a question:")
-                if user_question:
-                    save_chat_message(st.session_state.user[0], user_question, "user")
-                    with st.chat_message("user"):
-                        st.markdown(user_question)
-
-                    client = init_groq_client()
-                    if client:
-                        try:
-                            with st.chat_message("assistant"):
-                                message_placeholder = st.empty()
-                                full_response = ""
-                                stream = client.chat.completions.create(
-                                    messages=[
-                                        {"role": "system", "content": "You are a helpful assistant."},
-                                        *user_chats,
-                                        {"role": "user", "content": user_question}
-                                    ],
-                                    model="mixtral-8x7b-32768",
-                                    max_tokens=1024,
-                                    stream=True
-                                )
-                                for chunk in stream:
-                                    if chunk.choices[0].delta.content is not None:
-                                        full_response += chunk.choices[0].delta.content
-                                        message_placeholder.markdown(full_response + "▌")
-                                
-                                message_placeholder.markdown(full_response)
-                            save_chat_message(st.session_state.user[0], full_response, "assistant")
-                        except Exception as e:
-                            st.error(f"An error occurred while processing your request: {str(e)}")
-
-            with tab2:
-                st.subheader("Community Chat")
-                community_messages = get_community_messages()
-                
-                # Custom CSS for chat-like display
-                st.markdown("""
-                    <style>
-                        .chat-message {
-                            padding: 10px;
-                            border-radius: 10px;
-                            margin-bottom: 10px;
-                            max-width: 80%;
-                            word-wrap: break-word;
-                        }
-                        .user-message {
-                            background-color: #e6f3ff;
-                            float: right;
-                        }
-                        .other-message {
-                            background-color: #f0f0f0;
-                            float: left;
-                        }
-                        .clearfix::after {
-                            content: "";
-                            clear: both;
-                            display: table;
-                        }
-                    </style>
-                """, unsafe_allow_html=True)
-
-                for nickname, message, timestamp in community_messages:
-                    if nickname == get_nickname(st.session_state.user[0]):
-                        st.markdown(f'<div class="chat-message user-message">{message}<br><small>{timestamp}</small></div><div class="clearfix"></div>', unsafe_allow_html=True)
-                    else:
-                        st.markdown(f'<div class="chat-message other-message"><strong>{nickname}</strong>: {message}<br><small>{timestamp}</small></div><div class="clearfix"></div>', unsafe_allow_html=True)
-                
-                community_message = st.text_input("Type your message for the community:")
-                if st.button("Send to Community"):
-                    save_community_message(st.session_state.user[0], community_message)
-                    st.success("Message sent to the community!")
-                    st.rerun()
-
-            with tab3:
-                st.subheader("Private Chat")
-                users = get_all_users_for_messaging()
-                chat_with = st.selectbox("Select user to chat with:", [user[1] for user in users if user[0] != st.session_state.user[0]])
-                receiver_id = next(user[0] for user in users if user[1] == chat_with)
-                
-                private_messages = get_private_messages(st.session_state.user[0], receiver_id)
-                for sender_id, message, timestamp in private_messages:
-                    if sender_id == st.session_state.user[0]:
-                        st.markdown(f'<div class="chat-message user-message">{message}<br><small>{timestamp}</small></div><div class="clearfix"></div>', unsafe_allow_html=True)
-                    else:
-                        st.markdown(f'<div class="chat-message other-message">{message}<br><small>{timestamp}</small></div><div class="clearfix"></div>', unsafe_allow_html=True)
-                
-                private_message = st.text_input(f"Type your message to {chat_with}:")
-                if st.button("Send Private Message"):
-                    save_private_message(st.session_state.user[0], receiver_id, private_message)
-                    st.success("Private message sent!")
-                    st.rerun()
-
-            with tab4:
-                st.subheader("Settings")
-                current_nickname = get_nickname(st.session_state.user[0])
-                new_nickname = st.text_input("Set your nickname (leave blank for anonymous):", value=current_nickname if current_nickname != "Anonymous" else "")
-                if st.button("Update Nickname"):
-                    set_nickname(st.session_state.user[0], new_nickname if new_nickname else None)
-                    st.success("Nickname updated successfully!")
+                client = init_groq_client()
+                if client:
+                    try:
+                        with st.chat_message("assistant"):
+                            message_placeholder = st.empty()
+                            full_response = ""
+                            stream = client.chat.completions.create(
+                                messages=[
+                                    {"role": "system", "content": "You are a helpful assistant."},
+                                    *user_chats,
+                                    {"role": "user", "content": user_question}
+                                ],
+                                model="mixtral-8x7b-32768",
+                                max_tokens=1024,
+                                stream=True
+                            )
+                            for chunk in stream:
+                                if chunk.choices[0].delta.content is not None:
+                                    full_response += chunk.choices[0].delta.content
+                                    message_placeholder.markdown(full_response + "▌")
+                            
+                            message_placeholder.markdown(full_response)
+                        save_chat_message(st.session_state.user[0], full_response, "assistant")
+                    except Exception as e:
+                        st.error(f"An error occurred while processing your request: {str(e)}")
 
         # Logout button at the bottom
         if st.button("Logout", key="logout_button"):
