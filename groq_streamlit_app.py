@@ -23,6 +23,7 @@ def init_db():
     # Check if admin exists, if not, create the fixed admin account
     c.execute("SELECT * FROM users WHERE username=?", ('samson tan',))
     if not c.fetchone():
+        admin_password = st.secrets["ADMIN_PASSWORD"]  # Get admin password from Streamlit secrets
         hashed_password = bcrypt.hashpw(admin_password.encode('utf-8'), bcrypt.gensalt())
         c.execute("INSERT INTO users (username, password, is_admin) VALUES (?, ?, ?)",
                   ('samson tan', hashed_password, 1))
